@@ -1,0 +1,13 @@
+# macOS
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
+
+# Frontend (không dùng, chỉ mobile)
+frontend/
+
+# Claude internal
+.claude/
+**/.agents/

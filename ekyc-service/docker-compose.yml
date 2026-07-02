@@ -1,0 +1,16 @@
+services:
+  ekyc-service:
+    build: .
+    ports:
+      - "8001:8001"
+    restart: unless-stopped
+    environment:
+      - PYTHONUNBUFFERED=1
+    volumes:
+      # Cache models để không download lại khi restart
+      - ekyc_model_cache:/root/.deepface
+      - ekyc_easyocr_cache:/root/.EasyOCR
+
+volumes:
+  ekyc_model_cache:
+  ekyc_easyocr_cache:

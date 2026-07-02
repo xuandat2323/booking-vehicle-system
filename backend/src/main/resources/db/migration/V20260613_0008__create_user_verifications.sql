@@ -1,0 +1,22 @@
+CREATE TABLE user_verifications (
+    id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT NOT NULL UNIQUE,
+    cccd_number VARCHAR(20),
+    full_name VARCHAR(255),
+    birth_day VARCHAR(20),
+    address TEXT,
+    issue_date VARCHAR(20),
+    expiry VARCHAR(20),
+    cccd_verified BOOLEAN DEFAULT FALSE,
+    cccd_spoofed BOOLEAN DEFAULT FALSE,
+    license_number VARCHAR(20),
+    license_name VARCHAR(255),
+    license_expiry VARCHAR(20),
+    license_class VARCHAR(10),
+    license_verified BOOLEAN DEFAULT FALSE,
+    license_spoofed BOOLEAN DEFAULT FALSE,
+    status VARCHAR(20) NOT NULL DEFAULT 'UNVERIFIED',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    CONSTRAINT fk_verification_user FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
+);

@@ -1,0 +1,14 @@
+package vehicle.booking.dto.response;
+
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
+
+public record CarLocationResponse(
+        Long carId,
+        BigDecimal latitude,
+        BigDecimal longitude,
+        String address,
+        String source,
+        LocalDateTime updatedAt
+) {
+}
