@@ -38,6 +38,7 @@ final carListProvider = FutureProvider<List<Map<String, dynamic>>>((ref) async {
   if (params.minPrice != null) queryParameters['minPrice'] = params.minPrice;
   if (params.maxPrice != null) queryParameters['maxPrice'] = params.maxPrice;
   if (params.seats.isNotEmpty) queryParameters['seats'] = params.seats;
+  if (params.branchId != null) queryParameters['branchId'] = params.branchId;
 
   final response = await dio.get('/api/cars', queryParameters: queryParameters);
   final data = response.data['data'] as Map<String, dynamic>;
@@ -53,6 +54,7 @@ class CarListParams {
   final double? minPrice;
   final double? maxPrice;
   final List<int> seats;
+  final int? branchId;
 
   const CarListParams({
     this.brand = '',
@@ -62,6 +64,7 @@ class CarListParams {
     this.minPrice,
     this.maxPrice,
     this.seats = const [],
+    this.branchId,
   });
 
   CarListParams copyWith({
@@ -72,6 +75,7 @@ class CarListParams {
     double? minPrice,
     double? maxPrice,
     List<int>? seats,
+    int? branchId,
   }) {
     return CarListParams(
       brand: brand ?? this.brand,
@@ -81,12 +85,14 @@ class CarListParams {
       minPrice: minPrice ?? this.minPrice,
       maxPrice: maxPrice ?? this.maxPrice,
       seats: seats ?? this.seats,
+      branchId: branchId ?? this.branchId,
     );
   }
 }
 
 class CarListScreen extends ConsumerStatefulWidget {
-  const CarListScreen({super.key});
+  final String? branchId;
+  const CarListScreen({super.key, this.branchId});
 
   @override
   ConsumerState<CarListScreen> createState() => _CarListScreenState();
@@ -98,6 +104,18 @@ class _CarListScreenState extends ConsumerState<CarListScreen> {
   final _locationController = TextEditingController();
   final _minPriceController = TextEditingController();
   final _maxPriceController = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.branchId != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        ref.read(carListParamsProvider.notifier).state = CarListParams(
+          branchId: int.tryParse(widget.branchId!),
+        );
+      });
+    }
+  }
 
   @override
   void dispose() {

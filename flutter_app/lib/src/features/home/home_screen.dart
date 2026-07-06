@@ -6,6 +6,7 @@ import '../../core/network/dio_provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../notifications/notification_screen.dart';
 import '../verification/verification_provider.dart';
+import '../branches/branch_list_screen.dart';
 
 final dashboardStatsProvider = FutureProvider.autoDispose<Map<String, dynamic>>((ref) async {
   final dio = ref.read(dioProvider);
@@ -136,7 +137,11 @@ class HomeScreen extends ConsumerWidget {
                     ),
                     const SizedBox(height: 16),
                     _QuickActionsGrid(),
-                    const SizedBox(height: 32),
+                    const SizedBox(height: 24),
+
+                    // Branches Section
+                    const _BranchesSection(),
+                    const SizedBox(height: 24),
 
                     // Recent bookings shortcut
                     Text(
@@ -257,11 +262,11 @@ class _QuickActionsGrid extends StatelessWidget {
         route: '/bookings',
       ),
       _QuickAction(
-        icon: Icons.location_on_rounded,
-        label: 'Theo dõi',
-        subtitle: 'Vị trí hiện tại',
-        color: cs.secondaryContainer,
-        route: '/bookings',
+        icon: Icons.store_rounded,
+        label: 'Cơ sở',
+        subtitle: 'Chọn điểm nhận xe',
+        color: cs.secondary,
+        route: '/branches',
       ),
       _QuickAction(
         icon: Icons.person_outline_rounded,
@@ -463,4 +468,91 @@ class _QuickAction {
     required this.color,
     required this.route,
   });
+}
+
+class _BranchesSection extends ConsumerWidget {
+  const _BranchesSection();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final branchAsync = ref.watch(branchListProvider);
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              'Cơ sở GoRento',
+              style: tt.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+            ),
+            TextButton(
+              onPressed: () => context.push('/branches'),
+              child: const Text('Xem tất cả'),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        SizedBox(
+          height: 120,
+          child: branchAsync.when(
+            data: (branches) {
+              if (branches.isEmpty) {
+                return const Center(child: Text('Chưa có cơ sở nào'));
+              }
+              return ListView.separated(
+                scrollDirection: Axis.horizontal,
+                itemCount: branches.length,
+                separatorBuilder: (context, index) => const SizedBox(width: 14),
+                itemBuilder: (context, index) {
+                  final branch = branches[index];
+                  final name = branch['name'] ?? '';
+                  final availableCount = branch['availableCarCount'] ?? 0;
+                  return GestureDetector(
+                    onTap: () => context.push('/cars?branchId=${branch['branchId']}'),
+                    child: Container(
+                      width: 180,
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: cs.surfaceContainerLowest,
+                        borderRadius: BorderRadius.circular(AppTheme.radiusCard),
+                        boxShadow: [AppTheme.softShadow],
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            name,
+                            style: tt.titleSmall?.copyWith(fontSize: 13, fontWeight: FontWeight.bold),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          Row(
+                            children: [
+                              Icon(Icons.directions_car, size: 14, color: cs.primary),
+                              const SizedBox(width: 4),
+                              Text(
+                                '$availableCount xe sẵn sàng',
+                                style: tt.bodySmall?.copyWith(color: cs.primary, fontWeight: FontWeight.w600),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              );
+            },
+            loading: () => const Center(child: CircularProgressIndicator()),
+            error: (error, stack) => const SizedBox.shrink(),
+          ),
+        ),
+      ],
+    );
+  }
 }

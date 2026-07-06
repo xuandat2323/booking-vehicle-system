@@ -173,19 +173,29 @@ class _AdminBookingsScreenState extends ConsumerState<AdminBookingsScreen> {
 
     final (actionLabel, endpoint, confirmMsg) = switch (action) {
       'confirm' => (
-          'xác nhận',
+          'duyệt đơn cọc',
           '/api/admin/bookings/$bookingId/confirm',
-          'Xác nhận đơn đặt xe "$carName"?'
+          'Xác nhận đã nhận cọc và duyệt đơn giữ xe "$carName"?'
         ),
       'cancel' => (
           'hủy',
           '/api/admin/bookings/$bookingId/cancel',
           'Hủy đơn đặt xe "$carName"? Hành động này không thể hoàn tác.'
         ),
+      'handover' => (
+          'bàn giao xe',
+          '/api/admin/bookings/$bookingId/handover',
+          'Tiến hành bàn giao xe "$carName" cho khách hàng bắt đầu thuê?'
+        ),
+      'return' => (
+          'nhận trả xe',
+          '/api/admin/bookings/$bookingId/return',
+          'Xác nhận khách hàng đã trả xe "$carName"?'
+        ),
       'complete' => (
           'hoàn thành',
           '/api/admin/bookings/$bookingId/complete',
-          'Đánh dấu đơn "$carName" là hoàn thành?'
+          'Xác nhận hoàn tất đơn "$carName", thanh toán nốt và trả cọc?'
         ),
       _ => ('', '', ''),
     };
@@ -261,9 +271,12 @@ class _BookingCardState extends State<_BookingCard> {
 
   (String, Color) _statusInfo(String status) {
     return switch (status) {
-      'PENDING' => ('Chờ duyệt', Colors.orange),
-      'CONFIRMED' => ('Đã xác nhận', Colors.blue),
+      'PENDING' => ('Chờ cọc', Colors.orange),
+      'DEPOSIT_PAID' => ('Đã cọc (Chờ duyệt)', Colors.amber.shade800),
+      'CONFIRMED' => ('Đã duyệt', Colors.blue),
+      'RENTING' => ('Đang thuê', const Color(0xFF9C4FE8)),
       'IN_PROGRESS' => ('Đang thuê', const Color(0xFF9C4FE8)),
+      'RETURNED' => ('Đã trả xe', Colors.teal),
       'COMPLETED' => ('Hoàn thành', Colors.green),
       'CANCELLED' => ('Đã hủy', Colors.red),
       _ => (status, Colors.grey),
@@ -279,10 +292,12 @@ class _BookingCardState extends State<_BookingCard> {
     final status = b['status']?.toString() ?? '';
     final (statusLabel, statusColor) = _statusInfo(status);
 
-    final showConfirm = status == 'PENDING';
-    final showCancel = status == 'PENDING' || status == 'CONFIRMED';
-    final showComplete = status == 'IN_PROGRESS';
-    final hasActions = showConfirm || showCancel || showComplete;
+    final showConfirm = status == 'DEPOSIT_PAID';
+    final showCancel = status == 'PENDING' || status == 'DEPOSIT_PAID' || status == 'CONFIRMED';
+    final showHandover = status == 'CONFIRMED';
+    final showReturn = status == 'RENTING' || status == 'IN_PROGRESS';
+    final showComplete = status == 'RETURNED';
+    final hasActions = showConfirm || showCancel || showHandover || showReturn || showComplete;
 
     return GestureDetector(
       onTap: hasActions ? () => setState(() => _expanded = !_expanded) : null,
@@ -375,10 +390,24 @@ class _BookingCardState extends State<_BookingCard> {
                 children: [
                   if (showConfirm)
                     _ActionButton(
-                      label: 'Xác nhận',
+                      label: 'Duyệt cọc',
                       icon: Icons.check_circle_outline_rounded,
                       color: Colors.blue,
                       onPressed: () => widget.onAction('confirm'),
+                    ),
+                  if (showHandover)
+                    _ActionButton(
+                      label: 'Bàn giao',
+                      icon: Icons.vpn_key_rounded,
+                      color: Colors.indigo,
+                      onPressed: () => widget.onAction('handover'),
+                    ),
+                  if (showReturn)
+                    _ActionButton(
+                      label: 'Nhận trả',
+                      icon: Icons.keyboard_return_rounded,
+                      color: Colors.teal,
+                      onPressed: () => widget.onAction('return'),
                     ),
                   if (showComplete)
                     _ActionButton(

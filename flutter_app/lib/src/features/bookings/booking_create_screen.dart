@@ -60,7 +60,7 @@ class _BookingCreateScreenState extends ConsumerState<BookingCreateScreen> {
     setState(() => _loading = true);
     try {
       final dio = ref.read(dioProvider);
-      await dio.post('/api/bookings', data: {
+      final bookingResponse = await dio.post('/api/bookings', data: {
         'carId': int.parse(widget.carId),
         'startDate': _selectedRange!.start.toIso8601String().split('T').first,
         'endDate': _selectedRange!.end.toIso8601String().split('T').first,
@@ -75,9 +75,28 @@ class _BookingCreateScreenState extends ConsumerState<BookingCreateScreen> {
           'dropoffLongitude': _dropoffLocation!.lng,
         },
       });
+
+      final bookingData = bookingResponse.data['data'];
+      final bookingId = bookingData['bookingId'];
+
+      // Fetch payment URL for the deposit
+      final paymentUrlResponse = await dio.post('/api/payments/vnpay/create/$bookingId');
+      final paymentUrl = paymentUrlResponse.data['data'] as String;
+
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Tạo yêu cầu thuê xe thành công')));
-        context.go('/bookings');
+        // Navigate to payment webview
+        final success = await context.push<bool>('/payment-webview', extra: paymentUrl);
+        if (mounted) {
+          if (success == true) {
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Đã đặt cọc giữ xe thành công! 🎉')));
+          } else {
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+              content: Text('Đã tạo đơn đặt xe, vui lòng hoàn tất đặt cọc sau trong chi tiết chuyến đi.'),
+              duration: Duration(seconds: 4),
+            ));
+          }
+          context.go('/bookings');
+        }
       }
     } catch (e) {
       if (mounted) {

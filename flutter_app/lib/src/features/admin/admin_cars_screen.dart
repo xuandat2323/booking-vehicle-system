@@ -44,7 +44,7 @@ class AdminCarsScreen extends ConsumerWidget {
               : ListView.separated(
                   padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
                   itemCount: cars.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 12),
+                  separatorBuilder: (context, index) => const SizedBox(height: 12),
                   itemBuilder: (context, i) {
                     final car = cars[i];
                     return _CarCard(
@@ -199,7 +199,7 @@ class _CarCard extends StatelessWidget {
                       width: 100,
                       height: 100,
                       fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => _PlaceholderImage(cs: cs),
+                      errorBuilder: (context, error, stackTrace) => _PlaceholderImage(cs: cs),
                     )
                   : _PlaceholderImage(cs: cs),
             ),

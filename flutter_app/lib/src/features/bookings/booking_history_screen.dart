@@ -16,15 +16,20 @@ final bookingHistoryProvider = FutureProvider<List<Map<String, dynamic>>>((ref) 
 Color _statusColor(String status, ColorScheme cs) {
   switch (status) {
     case 'PENDING':
-      return cs.secondaryContainer; // Orange
+      return cs.secondary;
+    case 'DEPOSIT_PAID':
+      return Colors.orange;
     case 'CONFIRMED':
-      return cs.primary; // Blue
+      return cs.primary;
+    case 'RENTING':
     case 'IN_PROGRESS':
-      return const Color(0xFF6750A4); // Indigo/Purple
+      return const Color(0xFF6750A4);
+    case 'RETURNED':
+      return Colors.teal;
     case 'COMPLETED':
-      return cs.tertiaryContainer; // Green
+      return cs.tertiaryContainer;
     case 'CANCELLED':
-      return cs.error; // Red
+      return cs.error;
     default:
       return cs.outline;
   }
@@ -33,11 +38,16 @@ Color _statusColor(String status, ColorScheme cs) {
 String _statusLabel(String status) {
   switch (status) {
     case 'PENDING':
-      return 'Chờ xác nhận';
+      return 'Chờ đặt cọc';
+    case 'DEPOSIT_PAID':
+      return 'Đã đặt cọc (Chờ duyệt)';
     case 'CONFIRMED':
       return 'Đã xác nhận';
+    case 'RENTING':
     case 'IN_PROGRESS':
       return 'Đang thuê';
+    case 'RETURNED':
+      return 'Đã trả xe';
     case 'COMPLETED':
       return 'Hoàn thành';
     case 'CANCELLED':
