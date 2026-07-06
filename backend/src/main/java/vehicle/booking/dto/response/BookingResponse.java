@@ -19,6 +19,7 @@ public record BookingResponse(
         LocalDate startDate,
         LocalDate endDate,
         BigDecimal totalPrice,
+        BigDecimal depositAmount,
         BookingStatus status,
         LocalDateTime createdAt,
         LocalDateTime updatedAt,

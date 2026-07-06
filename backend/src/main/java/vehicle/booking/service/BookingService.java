@@ -29,6 +29,10 @@ public interface BookingService {
 
     BookingResponse handoverBooking(Long bookingId);
 
+    BookingResponse returnBooking(Long bookingId);
+
+    BookingResponse returnBooking(Long bookingId, String currentUserPhone);
+
     BookingResponse completeBooking(Long bookingId);
 
     List<Long> expirePendingUnpaidBookings(LocalDateTime cutoff);

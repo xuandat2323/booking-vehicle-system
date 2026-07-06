@@ -52,6 +52,7 @@ public interface CarRepository extends JpaRepository<Car, Long> {
       AND (:maxPrice IS NULL OR c.pricePerDay <= :maxPrice)
       AND (:filterBySeats = false OR c.seats IN :seats)
       AND (:onlyAvailable = false OR c.status = 'AVAILABLE')
+      AND (:branchId IS NULL OR c.branch.branchId = :branchId)
     """)
     Page<Car> findWithFilters(
             @Param("brand")         String brand,
@@ -64,8 +65,11 @@ public interface CarRepository extends JpaRepository<Car, Long> {
             @Param("filterBySeats") boolean filterBySeats,
             @Param("seats")         List<Integer> seats,
             @Param("onlyAvailable") boolean onlyAvailable,
+            @Param("branchId")      Long branchId,
             Pageable pageable
     );
+
+    Page<Car> findByBranchBranchId(Long branchId, Pageable pageable);
 
     Page<Car> findByOwnerUserId(Long ownerId, Pageable pageable);
 

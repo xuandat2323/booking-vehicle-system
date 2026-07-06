@@ -57,7 +57,7 @@ public class PaymentController {
         if ("00".equals(responseCode)) {
             Booking booking = bookingRepository.findById(bookingId).orElse(null);
             if (booking != null && booking.getStatus() == BookingStatus.PENDING) {
-                booking.setStatus(BookingStatus.CONFIRMED);
+                booking.setStatus(BookingStatus.DEPOSIT_PAID);
                 bookingRepository.save(booking);
             }
             return ResponseEntity.ok(new ApiResponse<>(true, "Thanh toán thành công", true));
@@ -81,7 +81,7 @@ public class PaymentController {
             if ("00".equals(vnp_ResponseCode)) {
                 Booking booking = bookingRepository.findById(bookingId).orElse(null);
                 if (booking != null && booking.getStatus() == BookingStatus.PENDING) {
-                    booking.setStatus(BookingStatus.CONFIRMED);
+                    booking.setStatus(BookingStatus.DEPOSIT_PAID);
                     bookingRepository.save(booking);
                 }
                 response.sendRedirect(frontendRedirectUrl + "?payment=success");
