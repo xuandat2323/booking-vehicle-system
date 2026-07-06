@@ -81,6 +81,7 @@ public class BookingServiceImpl implements BookingService {
 
         long days = request.startDate().until(request.endDate()).getDays() + 1;
         BigDecimal totalPrice = car.getPricePerDay().multiply(BigDecimal.valueOf(days));
+        BigDecimal depositAmount = totalPrice.multiply(new BigDecimal("0.30")).setScale(0, java.math.RoundingMode.HALF_UP);
 
         Booking booking = new Booking();
         booking.setUser(user);
@@ -88,6 +89,7 @@ public class BookingServiceImpl implements BookingService {
         booking.setStartDate(request.startDate());
         booking.setEndDate(request.endDate());
         booking.setTotalPrice(totalPrice);
+        booking.setDepositAmount(depositAmount);
         booking.setPickupAddress(request.pickupAddress());
         booking.setPickupLatitude(request.pickupLatitude());
         booking.setPickupLongitude(request.pickupLongitude());
@@ -186,7 +188,7 @@ public class BookingServiceImpl implements BookingService {
         Booking booking = bookingRepository.findById(bookingId)
                 .orElseThrow(() -> new AppException(ErrorCode.BOOKING_NOT_FOUND, bookingId));
 
-        if (booking.getStatus() != BookingStatus.PENDING) {
+        if (booking.getStatus() != BookingStatus.DEPOSIT_PAID) {
             throw new AppException(ErrorCode.BOOKING_INVALID_STATUS_TRANSITION,
                     booking.getStatus(), BookingStatus.CONFIRMED);
         }
@@ -217,13 +219,56 @@ public class BookingServiceImpl implements BookingService {
 
         if (booking.getStatus() != BookingStatus.CONFIRMED) {
             throw new AppException(ErrorCode.BOOKING_INVALID_STATUS_TRANSITION,
-                    booking.getStatus(), BookingStatus.IN_PROGRESS);
+                    booking.getStatus(), BookingStatus.RENTING);
         }
 
-        booking.setStatus(BookingStatus.IN_PROGRESS);
+        booking.setStatus(BookingStatus.RENTING);
         booking = bookingRepository.save(booking);
 
+        notificationService.send(booking.getUser(),
+                "Bắt đầu chuyến đi",
+                "Bạn đã nhận xe và chuyến đi #" + booking.getBookingId() + " chính thức bắt đầu!",
+                NotificationType.BOOKING_CONFIRMED, booking.getBookingId());
+
         return mapToResponse(booking);
+    }
+
+    @Override
+    @Transactional
+    public BookingResponse returnBooking(Long bookingId) {
+        Booking booking = bookingRepository.findById(bookingId)
+                .orElseThrow(() -> new AppException(ErrorCode.BOOKING_NOT_FOUND, bookingId));
+
+        if (booking.getStatus() != BookingStatus.RENTING) {
+            throw new AppException(ErrorCode.BOOKING_INVALID_STATUS_TRANSITION,
+                    booking.getStatus(), BookingStatus.RETURNED);
+        }
+
+        booking.setStatus(BookingStatus.RETURNED);
+        booking = bookingRepository.save(booking);
+
+        notificationService.send(booking.getUser(),
+                "Trả xe thành công",
+                "Đơn đặt xe #" + booking.getBookingId() + " đã ghi nhận trả xe. Vui lòng chờ admin hoàn tất đơn.",
+                NotificationType.BOOKING_COMPLETED, booking.getBookingId());
+
+        return mapToResponse(booking);
+    }
+
+    @Override
+    @Transactional
+    public BookingResponse returnBooking(Long bookingId, String currentUserPhone) {
+        Booking booking = bookingRepository.findById(bookingId)
+                .orElseThrow(() -> new AppException(ErrorCode.BOOKING_NOT_FOUND, bookingId));
+
+        User currentUser = userRepository.findByPhone(currentUserPhone)
+                .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
+
+        if (!booking.getUser().getUserId().equals(currentUser.getUserId())) {
+            throw new AppException(ErrorCode.BOOKING_ACCESS_DENIED);
+        }
+
+        return returnBooking(bookingId);
     }
 
     @Override
@@ -232,7 +277,7 @@ public class BookingServiceImpl implements BookingService {
         Booking booking = bookingRepository.findById(bookingId)
                 .orElseThrow(() -> new AppException(ErrorCode.BOOKING_NOT_FOUND, bookingId));
 
-        if (booking.getStatus() != BookingStatus.IN_PROGRESS) {
+        if (booking.getStatus() != BookingStatus.RETURNED) {
             throw new AppException(ErrorCode.BOOKING_INVALID_STATUS_TRANSITION,
                     booking.getStatus(), BookingStatus.COMPLETED);
         }
@@ -338,6 +383,7 @@ public class BookingServiceImpl implements BookingService {
                 booking.getStartDate(),
                 booking.getEndDate(),
                 booking.getTotalPrice(),
+                booking.getDepositAmount(),
                 booking.getStatus(),
                 booking.getCreatedAt(),
                 booking.getUpdatedAt(),
@@ -359,6 +405,7 @@ public class BookingServiceImpl implements BookingService {
                 booking.getStartDate(),
                 booking.getEndDate(),
                 booking.getTotalPrice(),
+                booking.getDepositAmount(),
                 booking.getStatus()
         );
     }

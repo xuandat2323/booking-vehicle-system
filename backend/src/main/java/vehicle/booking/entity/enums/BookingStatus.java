@@ -2,8 +2,10 @@ package vehicle.booking.entity.enums;
 
 public enum BookingStatus {
     PENDING,
+    DEPOSIT_PAID,
     CONFIRMED,
-    IN_PROGRESS,
+    RENTING,
+    RETURNED,
     COMPLETED,
     CANCELLED
 }

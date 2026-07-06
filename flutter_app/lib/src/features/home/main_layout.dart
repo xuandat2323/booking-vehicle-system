@@ -28,6 +28,13 @@ class MainLayout extends StatelessWidget {
 
     return Scaffold(
       body: navigationShell,
+      floatingActionButton: FloatingActionButton(
+        onPressed: () => context.push('/chatbot'),
+        backgroundColor: cs.primary,
+        shape: const CircleBorder(),
+        child: const Icon(Icons.smart_toy_rounded, color: Colors.white),
+      ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
           color: cs.surfaceContainerLowest,

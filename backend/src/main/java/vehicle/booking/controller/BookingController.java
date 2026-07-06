@@ -98,4 +98,14 @@ public class BookingController {
             Authentication authentication) {
         return ResponseEntity.ok(new ApiResponse<>(true, "Cap nhat diem tra thanh cong", bookingService.updateDropoffLocation(id, authentication.getName(), request)));
     }
+
+    @PutMapping("/{id}/return")
+    public ResponseEntity<ApiResponse<BookingResponse>> returnBooking(
+            @PathVariable Long id,
+            Authentication authentication) {
+        BookingResponse response = bookingService.returnBooking(id, authentication.getName());
+        return ResponseEntity.ok(
+                new ApiResponse<>(true, "Trả xe thành công", response)
+        );
+    }
 }

@@ -39,8 +39,9 @@ public class VNPayServiceImpl implements VNPayService {
         Booking booking = bookingRepository.findById(bookingId)
                 .orElseThrow(() -> new AppException(ErrorCode.BOOKING_NOT_FOUND, bookingId));
 
-        // Note: Booking total price is stored as BigDecimal, VNPay requires amount * 100
-        long amount = booking.getTotalPrice().longValue() * 100;
+        // Note: Use depositAmount if available, fallback to totalPrice
+        java.math.BigDecimal paymentAmount = booking.getDepositAmount() != null ? booking.getDepositAmount() : booking.getTotalPrice();
+        long amount = paymentAmount.longValue() * 100;
 
         Map<String, String> vnp_Params = new HashMap<>();
         vnp_Params.put("vnp_Version", "2.1.0");

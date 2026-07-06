@@ -64,9 +64,11 @@ public class AdminServiceImpl implements AdminService {
         long totalCars = carRepository.count();
 
         long totalBookings = bookingRepository.count();
-        long pendingBookings = bookingRepository.findByStatus(BookingStatus.PENDING).size();
+        long pendingBookings = bookingRepository.findByStatus(BookingStatus.PENDING).size()
+                + bookingRepository.findByStatus(BookingStatus.DEPOSIT_PAID).size();
         long confirmedBookings = bookingRepository.findByStatus(BookingStatus.CONFIRMED).size();
-        long inProgressBookings = bookingRepository.findByStatus(BookingStatus.IN_PROGRESS).size();
+        long inProgressBookings = bookingRepository.findByStatus(BookingStatus.RENTING).size()
+                + bookingRepository.findByStatus(BookingStatus.RETURNED).size();
         long completedBookings = bookingRepository.findByStatus(BookingStatus.COMPLETED).size();
         long cancelledBookings = bookingRepository.findByStatus(BookingStatus.CANCELLED).size();
 
@@ -90,8 +92,10 @@ public class AdminServiceImpl implements AdminService {
     private UserSummaryResponse mapToUserSummary(User user) {
         long totalBookings = bookingRepository.findByUserUserIdAndStatus(user.getUserId(), BookingStatus.COMPLETED).size()
                 + bookingRepository.findByUserUserIdAndStatus(user.getUserId(), BookingStatus.PENDING).size()
+                + bookingRepository.findByUserUserIdAndStatus(user.getUserId(), BookingStatus.DEPOSIT_PAID).size()
                 + bookingRepository.findByUserUserIdAndStatus(user.getUserId(), BookingStatus.CONFIRMED).size()
-                + bookingRepository.findByUserUserIdAndStatus(user.getUserId(), BookingStatus.IN_PROGRESS).size();
+                + bookingRepository.findByUserUserIdAndStatus(user.getUserId(), BookingStatus.RENTING).size()
+                + bookingRepository.findByUserUserIdAndStatus(user.getUserId(), BookingStatus.RETURNED).size();
 
         return new UserSummaryResponse(
                 user.getUserId(),

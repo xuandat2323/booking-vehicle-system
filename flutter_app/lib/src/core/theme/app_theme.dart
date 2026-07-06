@@ -61,10 +61,11 @@ class AppTheme {
   static const double radiusChip = 9999;
 
   // ─── Spacing ───
-  static const double spacingSm = 8;
-  static const double spacingMd = 16;
-  static const double spacingLg = 24;
-  static const double spacingXl = 32;
+  static const double spacingXs = 4;
+  static const double spacingSm = 10;
+  static const double spacingMd = 18;
+  static const double spacingLg = 28;
+  static const double spacingXl = 36;
 
   // ─── ColorScheme ───
   static ColorScheme get colorScheme => const ColorScheme(
@@ -103,8 +104,8 @@ class AppTheme {
         surfaceTint: Color(0xFF405E92),
       );
 
-  // ─── TextTheme (Be Vietnam Pro) ───
-  static TextTheme get _baseTextTheme => GoogleFonts.beVietnamProTextTheme();
+  // ─── TextTheme (Inter — clean, modern, highly legible) ───
+  static TextTheme get _baseTextTheme => GoogleFonts.interTextTheme();
 
   static TextTheme get textTheme {
     final base = _baseTextTheme;
@@ -148,9 +149,9 @@ class AppTheme {
         fontWeight: FontWeight.w600,
         color: _onSurface,
       ),
-      bodyLarge: base.bodyLarge?.copyWith(color: _onSurface),
-      bodyMedium: base.bodyMedium?.copyWith(color: _onSurfaceVariant),
-      bodySmall: base.bodySmall?.copyWith(color: _onSurfaceVariant),
+      bodyLarge: base.bodyLarge?.copyWith(color: _onSurface, height: 1.55),
+      bodyMedium: base.bodyMedium?.copyWith(color: _onSurfaceVariant, height: 1.5),
+      bodySmall: base.bodySmall?.copyWith(color: _onSurfaceVariant, height: 1.45),
       labelLarge: base.labelLarge?.copyWith(
         fontWeight: FontWeight.w600,
         color: _onSurface,
@@ -229,7 +230,7 @@ class AppTheme {
           borderRadius: BorderRadius.circular(radiusInput),
           borderSide: BorderSide(color: cs.error, width: 1.5),
         ),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 18),
         labelStyle: tt.bodyMedium,
         hintStyle: tt.bodyMedium?.copyWith(color: cs.outline),
         prefixIconColor: cs.outline,

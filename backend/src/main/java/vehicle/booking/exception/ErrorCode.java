@@ -247,6 +247,11 @@ public enum ErrorCode {
             "REVIEW_NOT_FOUND",
             "Không tìm thấy đánh giá.",
             HttpStatus.NOT_FOUND
+    ),
+    RESOURCE_NOT_FOUND(
+            "RESOURCE_NOT_FOUND",
+            "Không tìm thấy %s với ID: %s",
+            HttpStatus.NOT_FOUND
     );
     private final String code;
     private final String message;

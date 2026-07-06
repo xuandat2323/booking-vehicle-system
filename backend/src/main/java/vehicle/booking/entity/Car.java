@@ -14,7 +14,6 @@ import java.util.List;
 import vehicle.booking.entity.enums.CarStatus;
 import vehicle.booking.entity.enums.FuelType;
 import vehicle.booking.entity.enums.Transmission;
-import vehicle.booking.entity.User;
 
 @Entity
 @Table(name = "car")
@@ -83,6 +82,10 @@ public class Car {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "owner_id")
     private User owner;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "branch_id")
+    private Branch branch;
 
     @OneToMany(mappedBy = "car", fetch = FetchType.LAZY)
     private List<CarImage> images = new ArrayList<>();

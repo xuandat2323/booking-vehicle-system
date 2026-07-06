@@ -10,10 +10,13 @@ import '../../features/auth/reset_password/reset_password_screen.dart';
 import '../../features/bookings/booking_create_screen.dart';
 import '../../features/bookings/booking_detail_screen.dart';
 import '../../features/bookings/booking_history_screen.dart';
+import '../../features/bookings/payment_webview_screen.dart';
 import '../../features/booking/booking_pickup_dropoff_screen.dart';
+import '../../features/branches/branch_list_screen.dart';
 import '../../features/cars/car_detail_screen.dart';
 import '../../features/cars/car_list_screen.dart';
 import '../../features/cars/car_tracking_screen.dart';
+import '../../features/chatbot/chatbot_screen.dart';
 import '../../features/home/home_screen.dart';
 import '../../features/home/main_layout.dart';
 import '../../features/splash/splash_screen.dart';
@@ -22,10 +25,6 @@ import '../../features/profile/change_password_screen.dart';
 import '../../features/invoices/invoice_list_screen.dart';
 import '../../features/invoices/invoice_detail_screen.dart';
 import '../../features/notifications/notification_screen.dart';
-import '../../features/owner/owner_dashboard_screen.dart';
-import '../../features/owner/owner_car_list_screen.dart';
-import '../../features/owner/owner_car_form_screen.dart';
-import '../../features/owner/owner_bookings_screen.dart';
 import '../../features/verification/verification_screen.dart';
 import '../../features/admin/admin_dashboard_screen.dart';
 import '../../features/admin/admin_users_screen.dart';
@@ -64,7 +63,12 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             GoRoute(path: '/home', builder: (c, s) => const HomeScreen()),
           ]),
           StatefulShellBranch(routes: [
-            GoRoute(path: '/cars', builder: (c, s) => const CarListScreen()),
+            GoRoute(
+              path: '/cars',
+              builder: (c, s) => CarListScreen(
+                branchId: s.uri.queryParameters['branchId'],
+              ),
+            ),
           ]),
           StatefulShellBranch(routes: [
             GoRoute(path: '/bookings', builder: (c, s) => const BookingHistoryScreen()),
@@ -106,14 +110,14 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(path: '/notifications', builder: (context, state) => const NotificationScreen()),
       GoRoute(path: '/verification', builder: (context, state) => const VerificationScreen()),
-      GoRoute(path: '/owner', builder: (context, state) => const OwnerDashboardScreen()),
-      GoRoute(path: '/owner/cars', builder: (context, state) => const OwnerCarListScreen()),
-      GoRoute(path: '/owner/cars/add', builder: (context, state) => const OwnerCarFormScreen()),
+      GoRoute(path: '/chatbot', builder: (context, state) => const ChatbotScreen()),
+      GoRoute(path: '/branches', builder: (context, state) => const BranchListScreen()),
       GoRoute(
-        path: '/owner/cars/:carId/edit',
-        builder: (context, state) => OwnerCarFormScreen(carId: state.pathParameters['carId']),
+        path: '/payment-webview',
+        builder: (context, state) => PaymentWebviewScreen(paymentUrl: state.extra as String),
       ),
-      GoRoute(path: '/owner/bookings', builder: (context, state) => const OwnerBookingsScreen()),
+
+      // ── Admin routes ──
       GoRoute(path: '/admin', builder: (context, state) => const AdminDashboardScreen()),
       GoRoute(path: '/admin/users', builder: (context, state) => const AdminUsersScreen()),
       GoRoute(path: '/admin/cars', builder: (context, state) => const AdminCarsScreen()),

@@ -13,6 +13,7 @@ public record BookingSummaryResponse(
         LocalDate startDate,
         LocalDate endDate,
         BigDecimal totalPrice,
+        BigDecimal depositAmount,
         BookingStatus status
 ) {
 }

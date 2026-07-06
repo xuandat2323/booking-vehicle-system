@@ -85,11 +85,32 @@ class BookingDetailScreen extends ConsumerWidget {
     }
   }
 
+  Future<void> _returnCar(BuildContext context, WidgetRef ref) async {
+    try {
+      final dio = ref.read(dioProvider);
+      await dio.put('/api/bookings/$bookingId/return');
+      ref.invalidate(bookingDetailProvider(bookingId));
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Gửi yêu cầu trả xe thành công!')),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Không thể trả xe: $e')),
+        );
+      }
+    }
+  }
+
   String _statusLabel(String status) {
     switch (status) {
-      case 'PENDING': return 'Chờ xác nhận';
+      case 'PENDING': return 'Chờ đặt cọc';
+      case 'DEPOSIT_PAID': return 'Đã đặt cọc (Chờ duyệt)';
       case 'CONFIRMED': return 'Đã xác nhận';
-      case 'IN_PROGRESS': return 'Đang thuê';
+      case 'RENTING': return 'Đang thuê';
+      case 'RETURNED': return 'Đã trả xe';
       case 'COMPLETED': return 'Hoàn thành';
       case 'CANCELLED': return 'Đã hủy';
       default: return status;
@@ -98,9 +119,11 @@ class BookingDetailScreen extends ConsumerWidget {
 
   Color _statusColor(String status, ColorScheme cs) {
     switch (status) {
-      case 'PENDING': return cs.secondaryContainer;
+      case 'PENDING': return cs.secondary;
+      case 'DEPOSIT_PAID': return Colors.orange;
       case 'CONFIRMED': return cs.primary;
-      case 'IN_PROGRESS': return const Color(0xFF6750A4);
+      case 'RENTING': return const Color(0xFF6750A4);
+      case 'RETURNED': return Colors.teal;
       case 'COMPLETED': return cs.tertiaryContainer;
       case 'CANCELLED': return cs.error;
       default: return cs.outline;
@@ -125,6 +148,13 @@ class BookingDetailScreen extends ConsumerWidget {
           String formattedPrice = priceStr;
           if (priceInt != null && priceInt >= 1000) {
             formattedPrice = '${priceInt ~/ 1000}k';
+          }
+
+          final depositStr = booking['depositAmount']?.toString() ?? '0';
+          int? depositInt = int.tryParse(depositStr.split('.').first);
+          String formattedDeposit = depositStr;
+          if (depositInt != null && depositInt >= 1000) {
+            formattedDeposit = '${depositInt ~/ 1000}k';
           }
 
           return SingleChildScrollView(
@@ -202,6 +232,23 @@ class BookingDetailScreen extends ConsumerWidget {
                         children: [
                           Row(
                             children: [
+                              Icon(Icons.payment_rounded, size: 20, color: cs.onSurfaceVariant),
+                              const SizedBox(width: 12),
+                              Text('Tiền cọc giữ xe (30%)', style: tt.bodyMedium),
+                            ],
+                          ),
+                          Text(
+                            '$formattedDeposit vnđ',
+                            style: tt.titleMedium?.copyWith(color: cs.secondary, fontWeight: FontWeight.bold),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Row(
+                            children: [
                               Icon(Icons.payments_rounded, size: 20, color: cs.onSurfaceVariant),
                               const SizedBox(width: 12),
                               Text('Tổng tiền', style: tt.bodyMedium),
@@ -264,7 +311,7 @@ class BookingDetailScreen extends ConsumerWidget {
                       children: [
                         Icon(Icons.payment_rounded, color: Colors.white),
                         SizedBox(width: 8),
-                        Text('Thanh toán qua VNPay', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 16)),
+                        Text('Đặt cọc giữ xe (VNPay)', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 16)),
                       ],
                     ),
                   ),
@@ -283,7 +330,31 @@ class BookingDetailScreen extends ConsumerWidget {
                   ),
                 ],
 
-                if (status == 'CONFIRMED' || status == 'IN_PROGRESS') ...[
+                if (status == 'DEPOSIT_PAID') ...[
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(AppTheme.radiusCard),
+                      border: Border.all(color: Colors.orange.withValues(alpha: 0.3)),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.hourglass_empty_rounded, color: Colors.orange),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            'Bạn đã đặt cọc thành công. Vui lòng chờ Admin phê duyệt hồ sơ lái xe của bạn.',
+                            style: tt.bodyMedium?.copyWith(color: Colors.orange.shade900, fontWeight: FontWeight.w500),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+
+                if (status == 'CONFIRMED' || status == 'RENTING' || status == 'IN_PROGRESS') ...[
                   GradientButton(
                     onPressed: () => context.push('/cars/${booking['carId']}/tracking'),
                     child: const Row(
@@ -293,6 +364,23 @@ class BookingDetailScreen extends ConsumerWidget {
                         SizedBox(width: 8),
                         Text('Định vị xe', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 16)),
                       ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                ],
+
+                if (status == 'RENTING' || status == 'IN_PROGRESS') ...[
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: () => _returnCar(context, ref),
+                      icon: const Icon(Icons.keyboard_return_rounded),
+                      label: const Text('Trả xe'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: cs.primary,
+                        side: BorderSide(color: cs.primary.withValues(alpha: 0.3)),
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                      ),
                     ),
                   ),
                 ],

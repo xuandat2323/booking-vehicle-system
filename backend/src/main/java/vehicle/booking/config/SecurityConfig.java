@@ -49,15 +49,16 @@ public class SecurityConfig {
                         .requestMatchers("/api/auth/**").permitAll()
                         .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
                         .requestMatchers("/api/cars/**").permitAll()
+                        .requestMatchers("/api/branches/**").permitAll()
                         .requestMatchers("/api/geo/**").permitAll()
 
                         .requestMatchers("/api/user/me").authenticated()
                         .requestMatchers("/api/bookings/**").hasRole("USER")
                         .requestMatchers("/api/invoices/**").hasRole("USER")
                         .requestMatchers("/api/payments/**").hasRole("USER")
+                        .requestMatchers("/api/chatbot/**").hasRole("USER")
 
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
-                        .requestMatchers("/api/owner/**").hasAnyRole("OWNER", "ADMIN")
                         .requestMatchers("/api/verification/**").authenticated()
 
                         .requestMatchers("/api/auth/logout").authenticated()
@@ -81,7 +82,8 @@ public class SecurityConfig {
         CorsConfiguration configuration = new CorsConfiguration();
         configuration.setAllowedOriginPatterns(Arrays.asList(
                 "http://localhost:*",
-                "http://127.0.0.1:*"
+                "http://127.0.0.1:*",
+                "http://10.1.1.179:*"
         ));
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(Arrays.asList("Authorization", "Content-Type", "Accept", "Origin"));

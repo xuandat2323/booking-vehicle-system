@@ -48,6 +48,7 @@ public class CarController {
             @RequestParam(required = false) BigDecimal minPrice,
             @RequestParam(required = false) BigDecimal maxPrice,
             @RequestParam(required = false) List<Integer> seats,
+            @RequestParam(required = false) Long branchId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "12") int size) {
 
@@ -60,7 +61,8 @@ public class CarController {
                 || location != null
                 || transmission != null
                 || fuelType != null
-                || (seats != null && !seats.isEmpty());
+                || (seats != null && !seats.isEmpty())
+                || branchId != null;
 
         Page<CarSummaryResponse> result;
         if (hasAdvancedFilters) {
@@ -74,6 +76,7 @@ public class CarController {
                     minPrice,
                     maxPrice,
                     seats,
+                    branchId,
                     pageable
             );
         } else {
