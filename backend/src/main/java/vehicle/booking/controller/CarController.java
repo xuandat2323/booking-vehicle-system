@@ -128,8 +128,9 @@ public class CarController {
             @RequestParam Double lat,
             @RequestParam Double lng,
             @RequestParam(defaultValue = "10") Double radius,
-            @RequestParam(defaultValue = "true") boolean onlyAvailable) {
-        List<CarSummaryResponse> cars = carService.getNearbyCars(lat, lng, radius, onlyAvailable);
+            @RequestParam(defaultValue = "true") boolean onlyAvailable,
+            @RequestParam(required = false) Long branchId) {
+        List<CarSummaryResponse> cars = carService.getNearbyCars(lat, lng, radius, onlyAvailable, branchId);
         return ResponseEntity.ok(new ApiResponse<>(true, "Lấy danh sách xe gần đây thành công", cars));
     }
 }

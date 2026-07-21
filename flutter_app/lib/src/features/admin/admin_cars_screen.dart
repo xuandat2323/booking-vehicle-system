@@ -84,7 +84,7 @@ class AdminCarsScreen extends ConsumerWidget {
   ) async {
     final carName =
         '${car['brand'] ?? ''} ${car['name'] ?? ''}'.trim();
-    final carId = car['carId'];
+    final carId = car['id'];
 
     final confirmed = await showDialog<bool>(
       context: context,
@@ -152,7 +152,7 @@ class _CarCard extends StatelessWidget {
     final status = car['status']?.toString() ?? '';
     final pricePerDay = car['pricePerDay'];
     final location = car['location']?.toString() ?? '';
-    final imageUrl = car['primaryImageUrl']?.toString();
+    final imageUrl = car['imageUrl']?.toString();
 
     final (statusLabel, statusColor) = switch (status) {
       'AVAILABLE' => ('Sẵn sàng', Colors.green),
@@ -163,7 +163,7 @@ class _CarCard extends StatelessWidget {
     };
 
     return Dismissible(
-      key: ValueKey(car['carId']),
+      key: ValueKey(car['id']),
       direction: DismissDirection.endToStart,
       background: Container(
         alignment: Alignment.centerRight,

@@ -7,6 +7,7 @@ import vehicle.booking.dto.response.CarAvailabilityResponse;
 import vehicle.booking.dto.response.CarResponse;
 import vehicle.booking.dto.response.CarSummaryResponse;
 import vehicle.booking.entity.Booking;
+import vehicle.booking.entity.Branch;
 import vehicle.booking.entity.Car;
 import vehicle.booking.entity.CarImage;
 import vehicle.booking.entity.enums.BookingStatus;
@@ -16,6 +17,7 @@ import vehicle.booking.entity.enums.Transmission;
 import vehicle.booking.exception.AppException;
 import vehicle.booking.exception.ErrorCode;
 import vehicle.booking.repository.BookingRepository;
+import vehicle.booking.repository.BranchRepository;
 import vehicle.booking.repository.CarImageRepository;
 import vehicle.booking.repository.CarRepository;
 import vehicle.booking.service.CarService;
@@ -61,6 +63,7 @@ public class CarServiceImpl implements CarService {
     private final CarImageRepository carImageRepository;
     private final vehicle.booking.repository.ReviewRepository reviewRepository;
     private final UserRepository userRepository;
+    private final BranchRepository branchRepository;
 
     @Override
     @Transactional
@@ -80,9 +83,17 @@ public class CarServiceImpl implements CarService {
         car.setTransmission(Objects.requireNonNullElse(request.transmission(), DEFAULT_TRANSMISSION));
         car.setFuelType(Objects.requireNonNullElse(request.fuelType(), DEFAULT_FUEL_TYPE));
         car.setLocation(request.location());
+        if (request.branchId() != null) {
+            car.setBranch(resolveBranch(request.branchId()));
+        }
 
         Car saved = carRepository.save(car);
         return mapToResponse(saved, null);
+    }
+
+    private Branch resolveBranch(Long branchId) {
+        return branchRepository.findById(branchId)
+                .orElseThrow(() -> new AppException(ErrorCode.BRANCH_NOT_FOUND, branchId));
     }
 
     @Override
@@ -107,6 +118,7 @@ public class CarServiceImpl implements CarService {
         if (request.transmission() != null) car.setTransmission(request.transmission());
         if (request.fuelType() != null) car.setFuelType(request.fuelType());
         if (request.location() != null) car.setLocation(request.location());
+        if (request.branchId() != null) car.setBranch(resolveBranch(request.branchId()));
 
         Car updated = carRepository.save(car);
         String primaryImageUrl = resolvePrimaryImageUrl(updated.getCarId());
@@ -297,7 +309,7 @@ public class CarServiceImpl implements CarService {
     }
 
     @Override
-    public List<CarSummaryResponse> getNearbyCars(Double lat, Double lng, Double radiusKm, boolean onlyAvailable) {
+    public List<CarSummaryResponse> getNearbyCars(Double lat, Double lng, Double radiusKm, boolean onlyAvailable, Long branchId) {
         double delta = radiusKm / 111.0;
         double lngDelta = radiusKm / (111.0 * Math.cos(Math.toRadians(lat)));
 
@@ -306,7 +318,7 @@ public class CarServiceImpl implements CarService {
         BigDecimal minLng = BigDecimal.valueOf(lng - lngDelta);
         BigDecimal maxLng = BigDecimal.valueOf(lng + lngDelta);
 
-        List<Car> cars = carRepository.findNearby(minLat, maxLat, minLng, maxLng, onlyAvailable);
+        List<Car> cars = carRepository.findNearby(minLat, maxLat, minLng, maxLng, onlyAvailable, branchId);
         Map<Long, String> imageUrls = resolvePrimaryImageUrls(cars);
         return cars.stream()
                 .map(car -> mapToSummary(car, imageUrls.get(car.getCarId())))

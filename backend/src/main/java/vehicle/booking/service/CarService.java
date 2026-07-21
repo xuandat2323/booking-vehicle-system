@@ -45,5 +45,5 @@ public interface CarService {
 
     CarResponse updateCarLocation(Long carId, vehicle.booking.dto.request.CarLocationUpdateRequest request);
 
-    List<CarSummaryResponse> getNearbyCars(Double lat, Double lng, Double radiusKm, boolean onlyAvailable);
+    List<CarSummaryResponse> getNearbyCars(Double lat, Double lng, Double radiusKm, boolean onlyAvailable, Long branchId);
 }

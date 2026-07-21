@@ -86,9 +86,7 @@ class ProfileScreen extends ConsumerWidget {
                           child: Text(
                             role.toUpperCase() == 'ADMIN'
                                 ? 'Quản trị viên'
-                                : role.toUpperCase() == 'OWNER'
-                                    ? 'Chủ xe'
-                                    : 'Khách hàng thành viên',
+                                : 'Khách hàng thành viên',
                             style: tt.labelMedium?.copyWith(color: Colors.white, fontWeight: FontWeight.w600),
                           ),
                         ),
@@ -222,52 +220,6 @@ class ProfileScreen extends ConsumerWidget {
                             ),
                             const SizedBox(height: 16),
                           ],
-
-                          // Owner channel entry
-                          InkWell(
-                            onTap: () => context.push('/owner'),
-                            borderRadius: BorderRadius.circular(AppTheme.radiusCard),
-                            child: Container(
-                              padding: const EdgeInsets.all(16),
-                              decoration: BoxDecoration(
-                                gradient: AppTheme.heroGradient,
-                                borderRadius: BorderRadius.circular(AppTheme.radiusCard),
-                              ),
-                              child: Row(
-                                children: [
-                                  Container(
-                                    padding: const EdgeInsets.all(10),
-                                    decoration: BoxDecoration(
-                                      color: Colors.white.withValues(alpha: 0.2),
-                                      shape: BoxShape.circle,
-                                    ),
-                                    child: const Icon(Icons.car_rental_rounded, color: Colors.white, size: 22),
-                                  ),
-                                  const SizedBox(width: 16),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          'Kênh cho thuê xe',
-                                          style: tt.titleMedium?.copyWith(
-                                            color: Colors.white,
-                                            fontWeight: FontWeight.w700,
-                                          ),
-                                        ),
-                                        Text(
-                                          'Đăng xe & quản lý đơn đặt của bạn',
-                                          style: tt.bodySmall?.copyWith(color: Colors.white70),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  const Icon(Icons.chevron_right_rounded, color: Colors.white),
-                                ],
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 16),
 
                           OutlinedButton.icon(
                             onPressed: () => context.push('/change-password'),

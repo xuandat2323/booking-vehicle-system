@@ -252,6 +252,11 @@ public enum ErrorCode {
             "RESOURCE_NOT_FOUND",
             "Không tìm thấy %s với ID: %s",
             HttpStatus.NOT_FOUND
+    ),
+    BRANCH_NOT_FOUND(
+            "BRANCH_NOT_FOUND",
+            "Không tìm thấy chi nhánh với ID: %s",
+            HttpStatus.NOT_FOUND
     );
     private final String code;
     private final String message;

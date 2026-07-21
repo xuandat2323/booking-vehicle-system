@@ -4,6 +4,7 @@ import vehicle.booking.dto.response.ApiResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.multipart.MultipartException;
 import org.springframework.security.access.AccessDeniedException;
@@ -72,6 +73,17 @@ public class GlobalExceptionHandler {
                 .body(ApiResponse.error(
                         ErrorCode.AUTH_FORBIDDEN.getCode(),
                         ErrorCode.AUTH_FORBIDDEN.getMessage()
+                ));
+    }
+
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<ApiResponse<Void>> handleDataIntegrityViolation(DataIntegrityViolationException ex) {
+        log.warn("[COMMON_BAD_REQUEST] Data integrity violation: {}", ex.getMessage());
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(ApiResponse.error(
+                        ErrorCode.COMMON_BAD_REQUEST.getCode(),
+                        "Dữ liệu không hợp lệ hoặc vi phạm ràng buộc (ví dụ: biển số đã tồn tại, thiếu trường bắt buộc)."
                 ));
     }
 

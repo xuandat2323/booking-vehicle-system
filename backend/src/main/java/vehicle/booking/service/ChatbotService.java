@@ -10,6 +10,7 @@ import org.springframework.stereotype.Service;
 import vehicle.booking.dto.response.CarSummaryResponse;
 import vehicle.booking.entity.enums.FuelType;
 import vehicle.booking.entity.enums.Transmission;
+import vehicle.booking.exception.AppException;
 
 import java.math.BigDecimal;
 import java.util.*;
@@ -70,6 +71,14 @@ public class ChatbotService {
             }
             result.put("answer", answer);
 
+        } catch (AppException e) {
+            // Lỗi do filter suy ra từ câu hỏi không hợp lệ (VD: số ghế/khoảng giá sai) —
+            // không phải lỗi hệ thống, nên trả lời thân thiện thay vì generic error.
+            log.info("Chatbot filter validation failed: {}", e.getResolvedMessage());
+            result.put("answer", "Xin lỗi, tôi chưa hiểu rõ yêu cầu của bạn (" + e.getResolvedMessage()
+                    + "). Bạn có thể mô tả lại theo hãng xe, số chỗ, khoảng giá nhé! 😊");
+            result.put("cars", Collections.emptyList());
+            result.put("totalFound", 0);
         } catch (Exception e) {
             log.error("Chatbot processing error: {}", e.getMessage(), e);
             result.put("answer", "Xin lỗi, tôi gặp lỗi khi xử lý câu hỏi của bạn. Vui lòng thử lại! 🙏");

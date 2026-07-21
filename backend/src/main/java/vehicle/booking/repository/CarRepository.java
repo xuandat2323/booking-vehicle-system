@@ -32,13 +32,15 @@ public interface CarRepository extends JpaRepository<Car, Long> {
       AND c.latitude  BETWEEN :minLat AND :maxLat
       AND c.longitude BETWEEN :minLng AND :maxLng
       AND (:onlyAvailable = false OR c.status = 'AVAILABLE')
+      AND (:branchId IS NULL OR c.branch.branchId = :branchId)
     """)
     List<Car> findNearby(
             @Param("minLat") BigDecimal minLat,
             @Param("maxLat") BigDecimal maxLat,
             @Param("minLng") BigDecimal minLng,
             @Param("maxLng") BigDecimal maxLng,
-            @Param("onlyAvailable") boolean onlyAvailable
+            @Param("onlyAvailable") boolean onlyAvailable,
+            @Param("branchId") Long branchId
     );
 
     @Query("""

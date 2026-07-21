@@ -220,7 +220,6 @@ class _UserCard extends StatelessWidget {
 
     final (roleLabel, roleColor) = switch (role) {
       'ADMIN' => ('Admin', Colors.red),
-      'OWNER' => ('Chủ xe', Colors.orange),
       _ => ('Người dùng', Colors.blue),
     };
 

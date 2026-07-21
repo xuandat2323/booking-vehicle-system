@@ -17,12 +17,15 @@ final carListProvider = FutureProvider<List<Map<String, dynamic>>>((ref) async {
   final nearbyLoc = ref.watch(nearbyLocationProvider);
 
   if (nearbyLoc != null) {
-    final response = await dio.get('/api/cars/nearby', queryParameters: {
+    final nearbyQuery = <String, dynamic>{
       'lat': nearbyLoc.lat,
       'lng': nearbyLoc.lng,
       'radius': 10,
       'onlyAvailable': params.onlyAvailable,
-    });
+    };
+    if (params.branchId != null) nearbyQuery['branchId'] = params.branchId;
+
+    final response = await dio.get('/api/cars/nearby', queryParameters: nearbyQuery);
     final content = response.data['data'] as List<dynamic>;
     return content.cast<Map<String, dynamic>>();
   }
