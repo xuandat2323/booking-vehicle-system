@@ -22,6 +22,10 @@ class GeocodingService {
     baseUrl: baseUrl,
     connectTimeout: const Duration(seconds: 10),
     receiveTimeout: const Duration(seconds: 10),
+    headers: {
+      'Accept': 'application/json',
+      if (baseUrl.contains('ngrok')) 'ngrok-skip-browser-warning': 'true',
+    },
   ));
 
   /// Reverse geocode lat/lng → human-readable address string.

@@ -79,6 +79,17 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           StatefulShellBranch(routes: [
             GoRoute(path: '/profile', builder: (c, s) => const ProfileScreen()),
           ]),
+          StatefulShellBranch(routes: [
+            GoRoute(
+              path: '/admin',
+              builder: (c, s) => const AdminDashboardScreen(),
+              routes: [
+                GoRoute(path: 'users', builder: (c, s) => const AdminUsersScreen()),
+                GoRoute(path: 'cars', builder: (c, s) => const AdminCarsScreen()),
+                GoRoute(path: 'bookings', builder: (c, s) => const AdminBookingsScreen()),
+              ],
+            ),
+          ]),
         ],
       ),
 
@@ -114,14 +125,17 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/branches', builder: (context, state) => const BranchListScreen()),
       GoRoute(
         path: '/payment-webview',
-        builder: (context, state) => PaymentWebviewScreen(paymentUrl: state.extra as String),
+        builder: (context, state) {
+          final extra = state.extra;
+          if (extra is Map<String, dynamic>) {
+            return PaymentWebviewScreen(paymentData: extra);
+          }
+          if (extra is Map) {
+            return PaymentWebviewScreen(paymentData: Map<String, dynamic>.from(extra));
+          }
+          return PaymentWebviewScreen(paymentUrl: extra?.toString());
+        },
       ),
-
-      // ── Admin routes ──
-      GoRoute(path: '/admin', builder: (context, state) => const AdminDashboardScreen()),
-      GoRoute(path: '/admin/users', builder: (context, state) => const AdminUsersScreen()),
-      GoRoute(path: '/admin/cars', builder: (context, state) => const AdminCarsScreen()),
-      GoRoute(path: '/admin/bookings', builder: (context, state) => const AdminBookingsScreen()),
     ],
   );
 });

@@ -1,9 +1,11 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/network/dio_provider.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/utils/toast_utils.dart';
 
 class ChatbotScreen extends ConsumerStatefulWidget {
   const ChatbotScreen({super.key});
@@ -74,9 +76,12 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
         _isLoading = false;
       });
     } catch (e) {
+      final msg = e is DioException
+          ? ToastUtils.mapError(e)
+          : 'Xin lỗi, có lỗi xảy ra. Vui lòng thử lại!';
       setState(() {
         _messages.add(_ChatMessage(
-          text: 'Xin lỗi, có lỗi xảy ra. Vui lòng thử lại! 🙏',
+          text: msg,
           isBot: true,
         ));
         _isLoading = false;

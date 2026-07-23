@@ -48,16 +48,17 @@ class BookingDetailScreen extends ConsumerWidget {
   Future<void> _pay(BuildContext context, WidgetRef ref) async {
     try {
       final dio = ref.read(dioProvider);
-      final response = await dio.post('/api/payments/vnpay/create/$bookingId');
-      final paymentUrl = response.data['data']?.toString();
-      if (paymentUrl == null || paymentUrl.isEmpty) {
-        throw Exception('Không tạo được link thanh toán');
+      final response = await dio.post('/api/payments/payos/create/$bookingId');
+      final raw = response.data['data'];
+      if (raw is! Map) {
+        throw Exception('Không tạo được QR thanh toán');
       }
+      final paymentData = Map<String, dynamic>.from(raw);
 
       if (context.mounted) {
         final success = await Navigator.of(context).push<bool>(
           MaterialPageRoute(
-            builder: (context) => PaymentWebviewScreen(paymentUrl: paymentUrl),
+            builder: (context) => PaymentWebviewScreen(paymentData: paymentData),
           ),
         );
 
@@ -79,7 +80,7 @@ class BookingDetailScreen extends ConsumerWidget {
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Lỗi tạo thanh toán VNPay: $e')),
+          SnackBar(content: Text('Lỗi tạo thanh toán: $e')),
         );
       }
     }

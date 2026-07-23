@@ -24,10 +24,16 @@ const refreshTokenKey = 'refresh_token';
 const goongMapKey = String.fromEnvironment('GOONG_MAP_KEY');
 const goongApiKey = String.fromEnvironment('GOONG_API_KEY');
 
+Map<String, String> _defaultHeaders() => {
+      'Accept': 'application/json',
+      if (baseUrl.contains('ngrok')) 'ngrok-skip-browser-warning': 'true',
+    };
+
 final rawDioProvider = Provider<Dio>((ref) {
   return Dio(BaseOptions(
     baseUrl: baseUrl,
-    headers: const {'Content-Type': 'application/json'},
+    headers: _defaultHeaders(),
+    contentType: Headers.jsonContentType,
   ));
 });
 
@@ -36,7 +42,8 @@ final dioProvider = Provider<Dio>((ref) {
   final authController = ref.read(authControllerProvider);
   final dio = Dio(BaseOptions(
     baseUrl: baseUrl,
-    headers: const {'Content-Type': 'application/json'},
+    headers: _defaultHeaders(),
+    contentType: Headers.jsonContentType,
   ));
 
   dio.interceptors.add(
@@ -45,6 +52,11 @@ final dioProvider = Provider<Dio>((ref) {
         final token = await storage.read(key: accessTokenKey);
         if (token != null && token.isNotEmpty) {
           options.headers['Authorization'] = 'Bearer $token';
+        }
+        // Let Dio set multipart boundary — forced JSON Content-Type breaks eKYC uploads.
+        if (options.data is FormData) {
+          options.headers.remove(Headers.contentTypeHeader);
+          options.contentType = null;
         }
         handler.next(options);
       },

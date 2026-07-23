@@ -752,7 +752,13 @@ class _StepCard extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis),
               ])),
-          _StatusChip(label: stateLabel, color: stateColor),
+          const SizedBox(width: 8),
+          Flexible(
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: _StatusChip(label: stateLabel, color: stateColor),
+            ),
+          ),
         ]),
         if (extractedInfo != null) ...[
           const SizedBox(height: 10),
@@ -911,15 +917,21 @@ class _StatusChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-        padding:
-            const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         decoration: BoxDecoration(
           color: color.withValues(alpha: 0.12),
           borderRadius: BorderRadius.circular(8),
         ),
-        child: Text(label,
-            style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                color: color, fontWeight: FontWeight.w700)),
+        child: Text(
+          label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                color: color,
+                fontWeight: FontWeight.w700,
+                fontSize: 11,
+              ),
+        ),
       );
 }
 

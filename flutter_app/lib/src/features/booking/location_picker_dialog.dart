@@ -257,11 +257,14 @@ class _LocationPickerDialogState extends State<LocationPickerDialog> {
                 padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
                 child: Row(
                   children: [
-                    Text(
-                      widget.title,
-                      style: tt.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+                    Expanded(
+                      child: Text(
+                        widget.title,
+                        style: tt.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
-                    const Spacer(),
                     IconButton(
                       onPressed: () => Navigator.of(context).pop(),
                       icon: const Icon(Icons.close_rounded),
@@ -343,35 +346,41 @@ class _LocationPickerDialogState extends State<LocationPickerDialog> {
                       ),
                       children: [
                         TileLayer(
-                          urlTemplate: _useSatellite
-                              ? 'https://maps.goong.io/tiles/satellite/{z}/{x}/{y}.png?api_key=$goongMapKey'
-                              : 'https://tiles.goong.io/goong_map_web/{z}/{x}/{y}.png?api_key=$goongMapKey',
-                          userAgentPackageName: 'vehicle.booking.system',
+                          // Carto Voyager — free for light use, avoids OSM public-tile policy warning.
+                          urlTemplate:
+                              'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png',
+                          subdomains: const ['a', 'b', 'c', 'd'],
+                          userAgentPackageName: 'com.gorento.app',
+                          maxZoom: 19,
                         ),
+                        if (goongMapKey.isNotEmpty && _useSatellite)
+                          TileLayer(
+                            urlTemplate:
+                                'https://maps.goong.io/tiles/satellite/{z}/{x}/{y}.png?api_key=$goongMapKey',
+                            userAgentPackageName: 'com.gorento.app',
+                          ),
                         if (_selected != null)
                           MarkerLayer(markers: [
                             Marker(
                               point: _selected!,
-                              width: 52,
-                              height: 52,
-                              child: Icon(Icons.location_on_rounded, color: accent, size: 48),
+                              width: 48,
+                              height: 48,
+                              child: Icon(Icons.location_on_rounded, color: accent, size: 44),
                             ),
                           ]),
                       ],
                     ),
-                    // Hint banner
                     Positioned(
                       top: 12,
                       left: 16,
                       right: 16,
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                         decoration: BoxDecoration(
                           color: cs.inverseSurface.withValues(alpha: 0.88),
-                          borderRadius: BorderRadius.circular(AppTheme.radiusPill),
+                          borderRadius: BorderRadius.circular(AppTheme.radiusInput),
                         ),
                         child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             if (_isGeocoding) ...[
                               SizedBox(
@@ -380,17 +389,28 @@ class _LocationPickerDialogState extends State<LocationPickerDialog> {
                                 child: CircularProgressIndicator(strokeWidth: 2, color: cs.onInverseSurface),
                               ),
                               const SizedBox(width: 8),
-                              Text('Đang lấy địa chỉ...', style: tt.labelMedium?.copyWith(color: cs.onInverseSurface)),
+                              Expanded(
+                                child: Text(
+                                  'Đang lấy địa chỉ...',
+                                  style: tt.labelMedium?.copyWith(color: cs.onInverseSurface),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
                             ] else ...[
                               Icon(Icons.touch_app_rounded, color: cs.onInverseSurface, size: 16),
                               const SizedBox(width: 8),
-                              Text('Chạm bản đồ để ghim vị trí', style: tt.labelMedium?.copyWith(color: cs.onInverseSurface)),
+                              Expanded(
+                                child: Text(
+                                  'Chạm bản đồ để ghim · hoặc tìm kiếm phía trên',
+                                  style: tt.labelMedium?.copyWith(color: cs.onInverseSurface),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
                             ],
                           ],
                         ),
                       ),
                     ),
-                      // My location button
                       Positioned(
                         bottom: 72,
                         right: 16,
@@ -408,18 +428,18 @@ class _LocationPickerDialogState extends State<LocationPickerDialog> {
                               : const Icon(Icons.my_location_rounded),
                         ),
                       ),
-                      // Style toggle
-                      Positioned(
-                        bottom: 16,
-                        right: 16,
-                        child: FloatingActionButton.small(
-                          heroTag: 'map_style_toggle',
-                          backgroundColor: cs.surfaceContainerLowest,
-                          foregroundColor: cs.primary,
-                          onPressed: () => setState(() => _useSatellite = !_useSatellite),
-                          child: Icon(_useSatellite ? Icons.map_rounded : Icons.satellite_rounded),
+                      if (goongMapKey.isNotEmpty)
+                        Positioned(
+                          bottom: 16,
+                          right: 16,
+                          child: FloatingActionButton.small(
+                            heroTag: 'map_style_toggle',
+                            backgroundColor: cs.surfaceContainerLowest,
+                            foregroundColor: cs.primary,
+                            onPressed: () => setState(() => _useSatellite = !_useSatellite),
+                            child: Icon(_useSatellite ? Icons.map_rounded : Icons.satellite_alt_rounded),
+                          ),
                         ),
-                      ),
                     ],
                   ),
                 ),

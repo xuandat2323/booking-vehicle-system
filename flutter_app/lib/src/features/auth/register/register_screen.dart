@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/auth/auth_provider.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/toast_utils.dart';
 
 class RegisterScreen extends ConsumerStatefulWidget {
   const RegisterScreen({super.key});
@@ -61,27 +62,21 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
             String msg = verificationId == "MOCK" 
                 ? 'Đã gửi mã xác thực OTP (Mock: 123456)' 
                 : 'Đã gửi mã xác thực OTP qua Firebase';
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text(msg)),
-            );
+            ToastUtils.showSuccess(context, msg);
             _startCountdown();
             setState(() => _sendingOtp = false);
           }
         },
         onError: (error) {
           if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Gửi OTP thất bại: $error')),
-            );
+            ToastUtils.showError(context, 'Gửi OTP thất bại: $error');
             setState(() => _sendingOtp = false);
           }
         },
       );
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Gửi OTP lỗi: $e')),
-        );
+        ToastUtils.showError(context, e);
         setState(() => _sendingOtp = false);
       }
     }
@@ -113,10 +108,13 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
             _passwordController.text,
             _otpController.text.trim(),
           );
-      if (mounted) context.go('/home');
+      if (mounted) {
+        ToastUtils.showSuccess(context, 'Đăng ký thành công!');
+        context.go('/home');
+      }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Đăng ký thất bại: $e')));
+        ToastUtils.showError(context, e);
       }
     }
   }

@@ -4,7 +4,9 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/auth/auth_provider.dart';
 import '../../core/network/dio_provider.dart';
+import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/widgets/app_ui.dart';
 import '../verification/verification_provider.dart';
 
 final userProfileProvider = FutureProvider.autoDispose<Map<String, dynamic>>((ref) async {
@@ -42,12 +44,12 @@ class ProfileScreen extends ConsumerWidget {
                 SliverToBoxAdapter(
                   child: Container(
                     padding: EdgeInsets.only(
-                      top: MediaQuery.of(context).padding.top + 24,
-                      bottom: 48,
+                      top: MediaQuery.of(context).padding.top + AppSpacing.lg,
+                      bottom: AppSpacing.xxl,
                     ),
                     decoration: const BoxDecoration(
                       gradient: AppTheme.heroGradient,
-                      borderRadius: BorderRadius.vertical(bottom: Radius.circular(32)),
+                      borderRadius: BorderRadius.vertical(bottom: Radius.circular(AppSpacing.xl)),
                     ),
                     child: Column(
                       children: [
@@ -68,7 +70,7 @@ class ProfileScreen extends ConsumerWidget {
                             ),
                           ),
                         ),
-                        const SizedBox(height: 16),
+                        const SizedBox(height: AppSpacing.lg),
                         Text(
                           name,
                           style: tt.headlineSmall?.copyWith(
@@ -76,9 +78,12 @@ class ProfileScreen extends ConsumerWidget {
                             fontWeight: FontWeight.w800,
                           ),
                         ),
-                        const SizedBox(height: 4),
+                        const SizedBox(height: AppSpacing.xs),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: AppSpacing.sm + 4,
+                            vertical: AppSpacing.xs,
+                          ),
                           decoration: BoxDecoration(
                             color: Colors.white.withValues(alpha: 0.2),
                             borderRadius: BorderRadius.circular(AppTheme.radiusPill),
@@ -95,61 +100,50 @@ class ProfileScreen extends ConsumerWidget {
                   ),
                 ),
                 SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
+                  padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.page,
+                    0,
+                    AppSpacing.page,
+                    AppSpacing.xl,
+                  ),
                   sliver: SliverToBoxAdapter(
                     child: Transform.translate(
-                      offset: const Offset(0, -24),
+                      offset: const Offset(0, -AppSpacing.lg),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          Container(
-                            decoration: BoxDecoration(
-                              color: cs.surfaceContainerLowest,
-                              borderRadius: BorderRadius.circular(AppTheme.radiusCard),
-                              boxShadow: [AppTheme.ambientShadow],
-                            ),
-                            padding: const EdgeInsets.all(24),
-                            child: Column(
-                              children: [
-                                _buildInfoRow(context, Icons.phone_iphone_rounded, 'Số điện thoại', phone),
-                                Padding(
-                                  padding: const EdgeInsets.symmetric(vertical: 16),
-                                  child: Divider(color: cs.outlineVariant.withValues(alpha: 0.3)),
-                                ),
-                                _buildInfoRow(context, Icons.email_rounded, 'Email liên hệ', email),
-                                Padding(
-                                  padding: const EdgeInsets.symmetric(vertical: 16),
-                                  child: Divider(color: cs.outlineVariant.withValues(alpha: 0.3)),
-                                ),
-                                _buildInfoRow(context, Icons.badge_rounded, 'Bằng lái xe', license),
-                              ],
+                          FadeSlideIn(
+                            child: AppSurface(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const SectionHeader(title: 'Thông tin cá nhân'),
+                                  _buildInfoRow(context, Icons.phone_iphone_rounded, 'Số điện thoại', phone),
+                                  const SizedBox(height: AppSpacing.lg),
+                                  _buildInfoRow(context, Icons.email_rounded, 'Email liên hệ', email),
+                                  const SizedBox(height: AppSpacing.lg),
+                                  _buildInfoRow(context, Icons.badge_rounded, 'Bằng lái xe', license),
+                                ],
+                              ),
                             ),
                           ),
-                          const SizedBox(height: 32),
+                          const SizedBox(height: AppSpacing.section),
 
-                          // Verification entry
-                          InkWell(
-                            onTap: () => context.push('/verification'),
-                            borderRadius: BorderRadius.circular(AppTheme.radiusCard),
-                            child: Container(
-                              padding: const EdgeInsets.all(16),
-                              decoration: BoxDecoration(
-                                color: cs.surfaceContainerLowest,
-                                borderRadius: BorderRadius.circular(AppTheme.radiusCard),
-                                boxShadow: [AppTheme.softShadow],
-                              ),
+                          FadeSlideIn(
+                            delay: const Duration(milliseconds: 80),
+                            child: AppSurface(
+                              onTap: () => context.push('/verification'),
                               child: Row(
                                 children: [
                                   Container(
-                                    padding: const EdgeInsets.all(10),
+                                    padding: const EdgeInsets.all(AppSpacing.sm + 2),
                                     decoration: BoxDecoration(
-                                      color: Colors.green.withValues(alpha: 0.12),
+                                      color: cs.primaryContainer.withValues(alpha: 0.15),
                                       shape: BoxShape.circle,
                                     ),
-                                    child: const Icon(Icons.verified_user_rounded,
-                                        color: Colors.green, size: 22),
+                                    child: Icon(Icons.verified_user_rounded, color: cs.primary, size: 22),
                                   ),
-                                  const SizedBox(width: 16),
+                                  const SizedBox(width: AppSpacing.md),
                                   Expanded(
                                     child: Column(
                                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -158,56 +152,49 @@ class ProfileScreen extends ConsumerWidget {
                                           Text('Xác minh danh tính',
                                               style: tt.titleMedium
                                                   ?.copyWith(fontWeight: FontWeight.w600)),
-                                          const SizedBox(width: 8),
+                                          const SizedBox(width: AppSpacing.sm),
                                           if (verifyStatus != null)
                                             _VerifyBadge(status: verifyStatus),
                                         ]),
+                                        const SizedBox(height: AppSpacing.xs),
                                         Text(
                                           'Upload CCCD & Bằng lái để thuê xe dễ dàng hơn',
-                                          style: tt.bodySmall?.copyWith(color: cs.outline),
+                                          style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
                                         ),
                                       ],
                                     ),
                                   ),
-                                  Icon(Icons.chevron_right_rounded, color: cs.outline),
+                                  Icon(Icons.chevron_right_rounded, color: cs.onSurfaceVariant),
                                 ],
                               ),
                             ),
                           ),
-                          const SizedBox(height: 16),
 
-                          // Admin panel entry (only for ADMIN role)
                           if (role.toUpperCase() == 'ADMIN') ...[
-                            InkWell(
-                              onTap: () => context.push('/admin'),
-                              borderRadius: BorderRadius.circular(AppTheme.radiusCard),
-                              child: Container(
-                                padding: const EdgeInsets.all(16),
-                                decoration: BoxDecoration(
-                                  gradient: const LinearGradient(
-                                    colors: [Color(0xFF1a1a2e), Color(0xFF16213e)],
-                                    begin: Alignment.topLeft,
-                                    end: Alignment.bottomRight,
-                                  ),
-                                  borderRadius: BorderRadius.circular(AppTheme.radiusCard),
-                                ),
+                            const SizedBox(height: AppSpacing.lg),
+                            FadeSlideIn(
+                              delay: const Duration(milliseconds: 120),
+                              child: AppSurface(
+                                color: cs.primary,
+                                onTap: () => context.go('/admin'),
                                 child: Row(
                                   children: [
                                     Container(
-                                      padding: const EdgeInsets.all(10),
+                                      padding: const EdgeInsets.all(AppSpacing.sm + 2),
                                       decoration: BoxDecoration(
                                         color: Colors.white.withValues(alpha: 0.15),
                                         shape: BoxShape.circle,
                                       ),
                                       child: const Icon(Icons.admin_panel_settings_rounded, color: Colors.white, size: 22),
                                     ),
-                                    const SizedBox(width: 16),
+                                    const SizedBox(width: AppSpacing.md),
                                     Expanded(
                                       child: Column(
                                         crossAxisAlignment: CrossAxisAlignment.start,
                                         children: [
                                           Text('Bảng quản trị',
                                               style: tt.titleMedium?.copyWith(color: Colors.white, fontWeight: FontWeight.w700)),
+                                          const SizedBox(height: AppSpacing.xs),
                                           Text('Quản lý người dùng, xe và đơn đặt',
                                               style: tt.bodySmall?.copyWith(color: Colors.white70)),
                                         ],
@@ -218,15 +205,16 @@ class ProfileScreen extends ConsumerWidget {
                                 ),
                               ),
                             ),
-                            const SizedBox(height: 16),
                           ],
 
+                          const SizedBox(height: AppSpacing.section),
+                          const SectionHeader(title: 'Tài khoản'),
                           OutlinedButton.icon(
                             onPressed: () => context.push('/change-password'),
                             icon: const Icon(Icons.lock_reset_rounded),
                             label: const Text('Đổi mật khẩu'),
                           ),
-                          const SizedBox(height: 16),
+                          const SizedBox(height: AppSpacing.md),
                           OutlinedButton.icon(
                             onPressed: () async {
                               await ref.read(authControllerProvider).logout();
@@ -250,20 +238,23 @@ class ProfileScreen extends ConsumerWidget {
         },
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.error_outline_rounded, color: cs.error, size: 48),
-              const SizedBox(height: 16),
-              Text('Không tải được thông tin cá nhân', style: tt.titleMedium),
-              const SizedBox(height: 8),
-              Text(e.toString(), style: tt.bodySmall, textAlign: TextAlign.center),
-              const SizedBox(height: 24),
-              OutlinedButton(
-                onPressed: () => ref.invalidate(userProfileProvider),
-                child: const Text('Thử lại'),
-              ),
-            ],
+          child: Padding(
+            padding: const EdgeInsets.all(AppSpacing.xxl),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.error_outline_rounded, color: cs.error, size: 48),
+                const SizedBox(height: AppSpacing.lg),
+                Text('Không tải được thông tin cá nhân', style: tt.titleMedium),
+                const SizedBox(height: AppSpacing.sm),
+                Text(e.toString(), style: tt.bodySmall, textAlign: TextAlign.center),
+                const SizedBox(height: AppSpacing.xl),
+                OutlinedButton(
+                  onPressed: () => ref.invalidate(userProfileProvider),
+                  child: const Text('Thử lại'),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -276,20 +267,20 @@ class ProfileScreen extends ConsumerWidget {
     return Row(
       children: [
         Container(
-          padding: const EdgeInsets.all(10),
+          padding: const EdgeInsets.all(AppSpacing.sm + 2),
           decoration: BoxDecoration(
-            color: cs.primaryContainer.withValues(alpha: 0.3),
+            color: cs.surfaceContainer,
             shape: BoxShape.circle,
           ),
           child: Icon(icon, color: cs.primary, size: 20),
         ),
-        const SizedBox(width: 16),
+        const SizedBox(width: AppSpacing.md),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(label, style: tt.bodySmall),
-              const SizedBox(height: 2),
+              Text(label, style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+              const SizedBox(height: AppSpacing.xs),
               Text(value, style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
             ],
           ),
@@ -305,18 +296,19 @@ class _VerifyBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     final (label, color) = switch (status) {
-      'VERIFIED' => ('Đã xác minh', Colors.green),
-      'PENDING'  => ('Đang xử lý', Colors.orange),
-      'REJECTED' => ('Bị từ chối', Colors.red),
-      _          => ('Chưa xác minh', Theme.of(context).colorScheme.outline),
+      'VERIFIED' => ('Đã xác minh', cs.tertiary),
+      'PENDING'  => ('Đang xử lý', cs.onSurfaceVariant),
+      'REJECTED' => ('Bị từ chối', cs.error),
+      _          => ('Chưa xác minh', cs.outline),
     };
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm - 1, vertical: AppSpacing.xs - 1),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: BorderRadius.circular(AppSpacing.sm - 2),
       ),
       child: Text(
         label,

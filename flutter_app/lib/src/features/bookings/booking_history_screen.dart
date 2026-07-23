@@ -1,9 +1,13 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/network/dio_provider.dart';
+import '../../core/utils/toast_utils.dart';
+import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/widgets/app_ui.dart';
 
 final bookingHistoryProvider = FutureProvider<List<Map<String, dynamic>>>((ref) async {
   final dio = ref.read(dioProvider);
@@ -16,23 +20,27 @@ final bookingHistoryProvider = FutureProvider<List<Map<String, dynamic>>>((ref) 
 Color _statusColor(String status, ColorScheme cs) {
   switch (status) {
     case 'PENDING':
-      return cs.secondary;
     case 'DEPOSIT_PAID':
-      return Colors.orange;
+      return cs.onSurfaceVariant;
     case 'CONFIRMED':
-      return cs.primary;
     case 'RENTING':
     case 'IN_PROGRESS':
-      return const Color(0xFF6750A4);
+      return cs.primary;
     case 'RETURNED':
-      return Colors.teal;
     case 'COMPLETED':
-      return cs.tertiaryContainer;
+      return cs.tertiary;
     case 'CANCELLED':
       return cs.error;
     default:
       return cs.outline;
   }
+}
+
+String _loadErrorMessage(Object error) {
+  if (error is DioException && error.response?.statusCode == 403) {
+    return 'Tài khoản admin không xem đơn cá nhân — dùng tab Quản trị.';
+  }
+  return ToastUtils.mapError(error);
 }
 
 String _statusLabel(String status) {
@@ -82,30 +90,30 @@ class BookingHistoryScreen extends ConsumerWidget {
           if (bookings.isEmpty) {
             return Center(
               child: Padding(
-                padding: const EdgeInsets.all(32),
+                padding: const EdgeInsets.all(AppSpacing.xxl),
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Container(
-                      padding: const EdgeInsets.all(24),
+                      padding: const EdgeInsets.all(AppSpacing.lg),
                       decoration: BoxDecoration(
                         color: cs.surfaceContainerLow,
                         shape: BoxShape.circle,
                       ),
-                      child: Icon(Icons.receipt_long_rounded, size: 64, color: cs.outlineVariant),
+                      child: Icon(Icons.receipt_long_rounded, size: 64, color: cs.onSurfaceVariant),
                     ),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: AppSpacing.xl),
                     Text(
                       'Chưa có chuyến đi nào',
                       style: tt.titleLarge?.copyWith(fontWeight: FontWeight.w700),
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: AppSpacing.sm),
                     Text(
                       'Bắt đầu thuê xe để khám phá những hành trình mới.',
                       style: tt.bodyMedium,
                       textAlign: TextAlign.center,
                     ),
-                    const SizedBox(height: 32),
+                    const SizedBox(height: AppSpacing.xl),
                     GradientButton(
                       onPressed: () => context.push('/cars'),
                       width: 200,
@@ -119,14 +127,17 @@ class BookingHistoryScreen extends ConsumerWidget {
           return RefreshIndicator(
             onRefresh: () async => ref.invalidate(bookingHistoryProvider),
             child: ListView.separated(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.page,
+                vertical: AppSpacing.lg,
+              ),
               itemCount: bookings.length,
-              separatorBuilder: (_, _) => const SizedBox(height: 16),
+              separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.md),
               itemBuilder: (context, index) {
                 final booking = bookings[index];
                 final status = booking['status']?.toString() ?? '';
                 final statusColor = _statusColor(status, cs);
-                
+
                 final priceStr = booking['totalPrice']?.toString() ?? '0';
                 int? priceInt = int.tryParse(priceStr.split('.').first);
                 String formattedPrice = priceStr;
@@ -134,109 +145,96 @@ class BookingHistoryScreen extends ConsumerWidget {
                   formattedPrice = '${priceInt ~/ 1000}k';
                 }
 
-                return Container(
-                  decoration: BoxDecoration(
-                    color: cs.surfaceContainerLowest,
-                    borderRadius: BorderRadius.circular(AppTheme.radiusCard),
-                    boxShadow: [AppTheme.ambientShadow],
-                  ),
-                  child: Material(
-                    color: Colors.transparent,
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(AppTheme.radiusCard),
-                      onTap: () => context.push('/bookings/${booking['bookingId']}'),
-                      child: Padding(
-                        padding: const EdgeInsets.all(20),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                return FadeSlideIn(
+                  delay: Duration(milliseconds: index * 50),
+                  child: AppSurface(
+                    onTap: () => context.push('/bookings/${booking['bookingId']}'),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
                           children: [
-                            // Header: Car name & Status
-                            Row(
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.all(12),
-                                  decoration: BoxDecoration(
-                                    color: statusColor.withValues(alpha: 0.1),
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  child: Icon(Icons.directions_car_rounded, color: statusColor, size: 24),
-                                ),
-                                const SizedBox(width: 16),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        '${booking['carBrand'] ?? ''} ${booking['carName'] ?? ''}',
-                                        style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w700),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        formattedPrice,
-                                        style: tt.titleSmall?.copyWith(color: cs.primary, fontWeight: FontWeight.bold),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                  decoration: BoxDecoration(
-                                    color: statusColor.withValues(alpha: 0.1),
-                                    borderRadius: BorderRadius.circular(AppTheme.radiusPill),
-                                  ),
-                                  child: Text(
-                                    _statusLabel(status),
-                                    style: tt.labelSmall?.copyWith(
-                                      color: statusColor,
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  ),
-                                ),
-                              ],
+                            Container(
+                              padding: const EdgeInsets.all(AppSpacing.sm + 4),
+                              decoration: BoxDecoration(
+                                color: cs.surfaceContainer,
+                                borderRadius: BorderRadius.circular(AppTheme.radiusInput),
+                              ),
+                              child: Icon(Icons.directions_car_rounded, color: cs.primary, size: 24),
                             ),
-                            const SizedBox(height: 16),
-                            Divider(color: cs.outlineVariant.withValues(alpha: 0.15)),
-                            const SizedBox(height: 16),
-                            
-                            // Details
-                            Row(
-                              children: [
-                                Icon(Icons.event_note_rounded, size: 16, color: cs.outline),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Text(
-                                    '${booking['startDate']} → ${booking['endDate']}',
-                                    style: tt.bodyMedium,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            if (booking['pickupAddress'] != null && booking['pickupAddress'].toString().isNotEmpty) ...[
-                              const SizedBox(height: 8),
-                              Row(
+                            const SizedBox(width: AppSpacing.md),
+                            Expanded(
+                              child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Padding(
-                                    padding: const EdgeInsets.only(top: 2),
-                                    child: Icon(Icons.location_on_rounded, size: 16, color: cs.outline),
+                                  Text(
+                                    '${booking['carBrand'] ?? ''} ${booking['carName'] ?? ''}',
+                                    style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
                                   ),
-                                  const SizedBox(width: 8),
-                                  Expanded(
-                                    child: Text(
-                                      booking['pickupAddress'].toString(),
-                                      style: tt.bodyMedium,
-                                      maxLines: 2,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
+                                  const SizedBox(height: AppSpacing.xs),
+                                  Text(
+                                    formattedPrice,
+                                    style: tt.titleSmall?.copyWith(color: cs.primary, fontWeight: FontWeight.bold),
                                   ),
                                 ],
                               ),
-                            ],
+                            ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: AppSpacing.sm + 4,
+                                vertical: AppSpacing.sm - 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: statusColor.withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(AppTheme.radiusPill),
+                              ),
+                              child: Text(
+                                _statusLabel(status),
+                                style: tt.labelSmall?.copyWith(
+                                  color: statusColor,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
                           ],
                         ),
-                      ),
+                        const SizedBox(height: AppSpacing.lg),
+                        Row(
+                          children: [
+                            Icon(Icons.event_note_rounded, size: 16, color: cs.onSurfaceVariant),
+                            const SizedBox(width: AppSpacing.sm),
+                            Expanded(
+                              child: Text(
+                                '${booking['startDate']} → ${booking['endDate']}',
+                                style: tt.bodyMedium,
+                              ),
+                            ),
+                          ],
+                        ),
+                        if (booking['pickupAddress'] != null && booking['pickupAddress'].toString().isNotEmpty) ...[
+                          const SizedBox(height: AppSpacing.sm),
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Padding(
+                                padding: const EdgeInsets.only(top: 2),
+                                child: Icon(Icons.location_on_rounded, size: 16, color: cs.onSurfaceVariant),
+                              ),
+                              const SizedBox(width: AppSpacing.sm),
+                              Expanded(
+                                child: Text(
+                                  booking['pickupAddress'].toString(),
+                                  style: tt.bodyMedium,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ],
                     ),
                   ),
                 );
@@ -247,16 +245,20 @@ class BookingHistoryScreen extends ConsumerWidget {
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(
           child: Padding(
-            padding: const EdgeInsets.all(32),
+            padding: const EdgeInsets.all(AppSpacing.xxl),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Icon(Icons.error_outline_rounded, size: 64, color: cs.error),
-                const SizedBox(height: 16),
-                Text('Lỗi kết nối', style: tt.titleLarge),
-                const SizedBox(height: 8),
-                Text('$e', textAlign: TextAlign.center, style: tt.bodyMedium),
-                const SizedBox(height: 24),
+                const SizedBox(height: AppSpacing.lg),
+                Text('Không tải được đơn thuê', style: tt.titleLarge),
+                const SizedBox(height: AppSpacing.sm),
+                Text(
+                  _loadErrorMessage(e),
+                  textAlign: TextAlign.center,
+                  style: tt.bodyMedium,
+                ),
+                const SizedBox(height: AppSpacing.xl),
                 FilledButton.icon(
                   onPressed: () => ref.invalidate(bookingHistoryProvider),
                   icon: const Icon(Icons.refresh_rounded),

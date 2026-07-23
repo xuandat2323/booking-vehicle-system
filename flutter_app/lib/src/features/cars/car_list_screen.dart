@@ -1,15 +1,21 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 
 import '../../core/network/dio_provider.dart';
+import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/utils/format_utils.dart';
+import '../../core/utils/shimmer_utils.dart';
+import '../../core/widgets/app_ui.dart';
+import '../branches/branch_list_screen.dart';
 
 final carListParamsProvider = StateProvider<CarListParams>((ref) => const CarListParams());
 
-// null = normal mode, non-null = nearby mode with (lat, lng)
-final nearbyLocationProvider = StateProvider<({double lat, double lng})?> ((ref) => null);
+final nearbyLocationProvider = StateProvider<({double lat, double lng})?>((ref) => null);
 
 final carListProvider = FutureProvider<List<Map<String, dynamic>>>((ref) async {
   final dio = ref.read(dioProvider);
@@ -49,6 +55,20 @@ final carListProvider = FutureProvider<List<Map<String, dynamic>>>((ref) async {
   return content.cast<Map<String, dynamic>>();
 });
 
+const _brandOptions = [
+  'Tất cả',
+  'Toyota',
+  'VinFast',
+  'Honda',
+  'Mazda',
+  'Hyundai',
+  'Kia',
+  'Mercedes',
+  'BMW',
+  'Ford',
+  'Mitsubishi',
+];
+
 class CarListParams {
   final String brand;
   final String name;
@@ -79,18 +99,30 @@ class CarListParams {
     double? maxPrice,
     List<int>? seats,
     int? branchId,
+    bool clearBranchId = false,
+    bool clearMinPrice = false,
+    bool clearMaxPrice = false,
   }) {
     return CarListParams(
       brand: brand ?? this.brand,
       name: name ?? this.name,
       location: location ?? this.location,
       onlyAvailable: onlyAvailable ?? this.onlyAvailable,
-      minPrice: minPrice ?? this.minPrice,
-      maxPrice: maxPrice ?? this.maxPrice,
+      minPrice: clearMinPrice ? null : (minPrice ?? this.minPrice),
+      maxPrice: clearMaxPrice ? null : (maxPrice ?? this.maxPrice),
       seats: seats ?? this.seats,
-      branchId: branchId ?? this.branchId,
+      branchId: clearBranchId ? null : (branchId ?? this.branchId),
     );
   }
+}
+
+String carDisplayTitle(String? brand, String? name) {
+  final b = (brand ?? '').trim();
+  final n = (name ?? '').trim();
+  if (n.isEmpty) return b;
+  if (b.isEmpty) return n;
+  if (n.toLowerCase().contains(b.toLowerCase())) return n;
+  return '$b $n'.trim();
 }
 
 class CarListScreen extends ConsumerStatefulWidget {
@@ -102,11 +134,13 @@ class CarListScreen extends ConsumerStatefulWidget {
 }
 
 class _CarListScreenState extends ConsumerState<CarListScreen> {
-  final _brandController = TextEditingController();
   final _nameController = TextEditingController();
   final _locationController = TextEditingController();
   final _minPriceController = TextEditingController();
   final _maxPriceController = TextEditingController();
+
+  String _sheetBrand = 'Tất cả';
+  final _priceFormatter = NumberFormat('#,###', 'vi_VN');
 
   @override
   void initState() {
@@ -122,7 +156,6 @@ class _CarListScreenState extends ConsumerState<CarListScreen> {
 
   @override
   void dispose() {
-    _brandController.dispose();
     _nameController.dispose();
     _locationController.dispose();
     _minPriceController.dispose();
@@ -130,9 +163,31 @@ class _CarListScreenState extends ConsumerState<CarListScreen> {
     super.dispose();
   }
 
+  void _syncSheetFromParams(CarListParams params) {
+    _sheetBrand = params.brand.isEmpty ? 'Tất cả' : params.brand;
+    _nameController.text = params.name;
+    _locationController.text = params.location;
+    _minPriceController.text = params.minPrice != null
+        ? _priceFormatter.format(params.minPrice!.round())
+        : '';
+    _maxPriceController.text = params.maxPrice != null
+        ? _priceFormatter.format(params.maxPrice!.round())
+        : '';
+  }
+
+  void _formatPriceField(TextEditingController controller) {
+    final parsed = FormatUtils.parsePrice(controller.text);
+    if (parsed == null) return;
+    final formatted = _priceFormatter.format(parsed.round());
+    controller.value = TextEditingValue(
+      text: formatted,
+      selection: TextSelection.collapsed(offset: formatted.length),
+    );
+  }
+
   Future<void> _searchNearby() async {
     try {
-      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      final serviceEnabled = await Geolocator.isLocationServiceEnabled();
       if (!serviceEnabled) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -141,7 +196,7 @@ class _CarListScreenState extends ConsumerState<CarListScreen> {
         }
         return;
       }
-      LocationPermission permission = await Geolocator.checkPermission();
+      var permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
         if (permission == LocationPermission.denied) {
@@ -168,27 +223,199 @@ class _CarListScreenState extends ConsumerState<CarListScreen> {
     ref.invalidate(carListProvider);
   }
 
+  void _toggleNearby() {
+    if (ref.read(nearbyLocationProvider) != null) {
+      _clearNearby();
+    } else {
+      _searchNearby();
+    }
+  }
+
   void _applyFilters() {
-    final minPrice = double.tryParse(_minPriceController.text.trim());
-    final maxPrice = double.tryParse(_maxPriceController.text.trim());
-    ref.read(carListParamsProvider.notifier).state = CarListParams(
-      brand: _brandController.text,
+    _clearNearby();
+    final brand = _sheetBrand == 'Tất cả' ? '' : _sheetBrand;
+    final minPrice = FormatUtils.parsePrice(_minPriceController.text);
+    final maxPrice = FormatUtils.parsePrice(_maxPriceController.text);
+    ref.read(carListParamsProvider.notifier).state = ref.read(carListParamsProvider).copyWith(
+      brand: brand,
       name: _nameController.text,
       location: _locationController.text,
       minPrice: minPrice,
       maxPrice: maxPrice,
+      clearMinPrice: minPrice == null,
+      clearMaxPrice: maxPrice == null,
     );
     ref.invalidate(carListProvider);
   }
 
   void _resetFilters() {
-    _brandController.clear();
+    _sheetBrand = 'Tất cả';
     _nameController.clear();
     _locationController.clear();
     _minPriceController.clear();
     _maxPriceController.clear();
+    _clearNearby();
     ref.read(carListParamsProvider.notifier).state = const CarListParams();
     ref.invalidate(carListProvider);
+  }
+
+  void _toggleSeatFilter(int seat) {
+    final params = ref.read(carListParamsProvider);
+    final current = List<int>.from(params.seats);
+    if (current.contains(seat)) {
+      current.remove(seat);
+    } else {
+      current.add(seat);
+    }
+    if (ref.read(nearbyLocationProvider) != null) {
+      _clearNearby();
+    }
+    ref.read(carListParamsProvider.notifier).state = params.copyWith(seats: current);
+    ref.invalidate(carListProvider);
+  }
+
+  void _setBranchFilter(int? branchId) {
+    ref.read(carListParamsProvider.notifier).state = ref.read(carListParamsProvider).copyWith(
+      branchId: branchId,
+      clearBranchId: branchId == null,
+    );
+    ref.invalidate(carListProvider);
+  }
+
+  void _showFilterBottomSheet() {
+    _syncSheetFromParams(ref.read(carListParamsProvider));
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (context) => Consumer(
+        builder: (context, ref, _) {
+          final params = ref.watch(carListParamsProvider);
+          final tt = Theme.of(context).textTheme;
+
+          return Padding(
+            padding: EdgeInsets.fromLTRB(
+              AppSpacing.page,
+              AppSpacing.lg,
+              AppSpacing.page,
+              MediaQuery.of(context).viewInsets.bottom + AppSpacing.lg,
+            ),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('Bộ lọc nâng cao', style: tt.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+                      IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close)),
+                    ],
+                  ),
+                  const SizedBox(height: AppSpacing.lg),
+                  DropdownButtonFormField<String>(
+                    value: _brandOptions.contains(_sheetBrand) ? _sheetBrand : 'Tất cả',
+                    decoration: const InputDecoration(labelText: 'Hãng xe'),
+                    items: _brandOptions
+                        .map((b) => DropdownMenuItem(value: b, child: Text(b)))
+                        .toList(),
+                    onChanged: (value) => setState(() => _sheetBrand = value ?? 'Tất cả'),
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                  TextField(
+                    controller: _nameController,
+                    decoration: const InputDecoration(labelText: 'Tên xe'),
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                  TextField(
+                    controller: _locationController,
+                    decoration: const InputDecoration(labelText: 'Khu vực'),
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
+                  OutlinedButton(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      _searchNearby();
+                    },
+                    child: const Text('Vị trí hiện tại'),
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _minPriceController,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(labelText: 'Giá từ'),
+                          onChanged: (_) => _formatPriceField(_minPriceController),
+                        ),
+                      ),
+                      const SizedBox(width: AppSpacing.md),
+                      Expanded(
+                        child: TextField(
+                          controller: _maxPriceController,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(labelText: 'Đến'),
+                          onChanged: (_) => _formatPriceField(_maxPriceController),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: AppSpacing.lg),
+                  Text('Số chỗ', style: tt.labelLarge),
+                  const SizedBox(height: AppSpacing.sm),
+                  Wrap(
+                    spacing: AppSpacing.sm,
+                    runSpacing: AppSpacing.sm,
+                    children: [2, 4, 5, 7].map((seat) {
+                      final selected = params.seats.contains(seat);
+                      return FilterChip(
+                        label: Text('$seat chỗ'),
+                        selected: selected,
+                        showCheckmark: false,
+                        onSelected: (value) {
+                          final current = List<int>.from(params.seats);
+                          if (value) {
+                            current.add(seat);
+                          } else {
+                            current.remove(seat);
+                          }
+                          ref.read(carListParamsProvider.notifier).state = params.copyWith(seats: current);
+                        },
+                      );
+                    }).toList(),
+                  ),
+                  const SizedBox(height: AppSpacing.xl),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () {
+                            _resetFilters();
+                            Navigator.pop(context);
+                          },
+                          child: const Text('Mặc định'),
+                        ),
+                      ),
+                      const SizedBox(width: AppSpacing.md),
+                      Expanded(
+                        child: FilledButton(
+                          onPressed: () {
+                            _applyFilters();
+                            Navigator.pop(context);
+                          },
+                          child: const Text('Áp dụng'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
   }
 
   @override
@@ -197,268 +424,256 @@ class _CarListScreenState extends ConsumerState<CarListScreen> {
     final params = ref.watch(carListParamsProvider);
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
-
-    _brandController.text = params.brand;
-    _nameController.text = params.name;
-    _locationController.text = params.location;
-    _minPriceController.text = params.minPrice?.toString() ?? '';
-    _maxPriceController.text = params.maxPrice?.toString() ?? '';
+    final branchesAsync = ref.watch(branchListProvider);
 
     final isNearbyMode = ref.watch(nearbyLocationProvider) != null;
+    final hasActiveFilters = params.brand.isNotEmpty ||
+        params.name.isNotEmpty ||
+        params.location.isNotEmpty ||
+        params.seats.isNotEmpty ||
+        params.minPrice != null ||
+        params.maxPrice != null ||
+        params.branchId != null;
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Thuê xe tự lái'),
         actions: [
-          if (isNearbyMode)
-            TextButton.icon(
-              onPressed: _clearNearby,
-              icon: const Icon(Icons.location_off_rounded, size: 18),
-              label: const Text('Xoá vị trí'),
-              style: TextButton.styleFrom(foregroundColor: cs.error),
-            )
-          else
-            IconButton(
-              onPressed: _searchNearby,
-              icon: const Icon(Icons.my_location_rounded),
-              tooltip: 'Tìm xe gần tôi (10 km)',
+          IconButton(
+            onPressed: _showFilterBottomSheet,
+            icon: Badge(
+              isLabelVisible: hasActiveFilters,
+              child: const Icon(Icons.filter_list_rounded),
             ),
+          ),
         ],
       ),
       body: Column(
         children: [
-          // ─── Filter Bar ───
-          if (isNearbyMode)
-            Container(
-              width: double.infinity,
-              color: cs.primaryContainer.withValues(alpha: 0.1),
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-              child: Row(
-                children: [
-                  Icon(Icons.location_on_rounded, color: cs.primary, size: 16),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'Đang tìm xe trong bán kính 10 km',
-                      style: tt.bodyMedium?.copyWith(color: cs.primary, fontWeight: FontWeight.w600),
-                    ),
-                  ),
-                  GestureDetector(
-                    onTap: _clearNearby,
-                    child: Icon(Icons.close_rounded, color: cs.primary, size: 20),
-                  ),
-                ],
-              ),
-            ),
-          
-          Theme(
-            data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-            child: ExpansionTile(
-              tilePadding: const EdgeInsets.symmetric(horizontal: 20),
-              title: Text('Bộ lọc nâng cao', style: tt.titleMedium),
-              childrenPadding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+          SizedBox(
+            height: 48,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.page),
               children: [
-                TextField(controller: _brandController, decoration: const InputDecoration(labelText: 'Hãng xe')),
-                const SizedBox(height: 12),
-                TextField(controller: _nameController, decoration: const InputDecoration(labelText: 'Tên xe')),
-                const SizedBox(height: 12),
-                TextField(controller: _locationController, decoration: const InputDecoration(labelText: 'Khu vực')),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(child: TextField(controller: _minPriceController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Giá từ'))),
-                    const SizedBox(width: 12),
-                    Expanded(child: TextField(controller: _maxPriceController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Đến'))),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text('Số chỗ', style: tt.labelLarge),
-                ),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [2, 4, 5, 7].map((seat) {
-                    final params = ref.watch(carListParamsProvider);
-                    final selected = params.seats.contains(seat);
-                    return FilterChip(
+                for (final seat in [4, 5, 7])
+                  Padding(
+                    padding: const EdgeInsets.only(right: AppSpacing.sm),
+                    child: FilterChip(
                       label: Text('$seat chỗ'),
-                      selected: selected,
-                      onSelected: (value) {
-                        final current = List<int>.from(params.seats);
-                        if (value) {
-                          current.add(seat);
-                        } else {
-                          current.remove(seat);
-                        }
-                        ref.read(carListParamsProvider.notifier).state = params.copyWith(seats: current);
-                      },
-                    );
-                  }).toList(),
-                ),
-                const SizedBox(height: 24),
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton(
-                        onPressed: _resetFilters,
-                        child: const Text('Mặc định'),
-                      ),
+                      selected: params.seats.contains(seat),
+                      showCheckmark: false,
+                      visualDensity: VisualDensity.compact,
+                      onSelected: (_) => _toggleSeatFilter(seat),
                     ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: FilledButton(
-                        onPressed: _applyFilters,
-                        child: const Text('Tìm xe'),
-                      ),
-                    ),
-                  ],
+                  ),
+                Padding(
+                  padding: const EdgeInsets.only(right: AppSpacing.sm),
+                  child: FilterChip(
+                    label: const Text('Gần tôi'),
+                    selected: isNearbyMode,
+                    showCheckmark: false,
+                    visualDensity: VisualDensity.compact,
+                    onSelected: (_) => _toggleNearby(),
+                  ),
                 ),
-              ],
-            ),
-          ),
-          
-          Divider(height: 1, color: cs.outlineVariant.withValues(alpha: 0.2)),
-
-          // ─── Car List ───
-          Expanded(
-            child: carsAsync.when(
-              data: (cars) => RefreshIndicator(
-                onRefresh: () async => ref.invalidate(carListProvider),
-                child: ListView.separated(
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
-                  itemCount: cars.length,
-                  separatorBuilder: (context, index) => const SizedBox(height: 28),
-                  itemBuilder: (context, index) {
-                    final car = cars[index];
-                    final priceStr = car['pricePerDay']?.toString() ?? '0';
-                    final location = car['location']?.toString() ?? 'Chưa có vị trí cập nhật';
-                    final seats = car['seats']?.toString() ?? '-';
-                    final transmission = car['transmission']?.toString() ?? 'Khác';
-                    
-                    // Format price: e.g. 650000 -> 650k
-                    int? priceInt = int.tryParse(priceStr.split('.').first);
-                    String formattedPrice = priceStr;
-                    if (priceInt != null && priceInt >= 1000) {
-                      formattedPrice = '${priceInt ~/ 1000}k';
-                    }
-
-                    return Container(
-                      decoration: BoxDecoration(
-                        color: cs.surfaceContainerLowest,
-                        borderRadius: BorderRadius.circular(AppTheme.radiusCard),
-                        boxShadow: [AppTheme.softShadow],
-                      ),
-                      clipBehavior: Clip.antiAlias,
-                      child: InkWell(
-                        onTap: () => context.push('/cars/${car['id']}'),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            // Car image (Cloudinary URL or placeholder)
-                            Builder(builder: (_) {
-                              final imageUrl = car['imageUrl']?.toString();
-                              if (imageUrl != null && imageUrl.isNotEmpty) {
-                                return Image.network(
-                                  imageUrl,
-                                  height: 180,
-                                  width: double.infinity,
-                                  fit: BoxFit.cover,
-                                  errorBuilder: (_, _, _) => Container(
-                                    height: 180,
-                                    color: cs.surfaceContainerHigh,
-                                    child: Center(child: Icon(Icons.directions_car_rounded, size: 64, color: cs.outlineVariant)),
-                                  ),
-                                  loadingBuilder: (_, child, progress) => progress == null
-                                      ? child
-                                      : Container(
-                                          height: 180,
-                                          color: cs.surfaceContainerHigh,
-                                          child: Center(child: CircularProgressIndicator(strokeWidth: 2, color: cs.outlineVariant)),
-                                        ),
-                                );
-                              }
-                              return Container(
-                                height: 180,
-                                color: cs.surfaceContainerHigh,
-                                child: Center(child: Icon(Icons.directions_car_rounded, size: 64, color: cs.outlineVariant)),
-                              );
-                            }),
-                            
-                            // Content
-                            Padding(
-                              padding: const EdgeInsets.all(20),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                          children: [
-                                            Text(
-                                              '${car['brand'] ?? ''} ${car['name'] ?? ''}',
-                                              style: tt.headlineSmall?.copyWith(fontSize: 20),
-                                            ),
-                                            const SizedBox(height: 4),
-                                            Row(
-                                              children: [
-                                                Icon(Icons.location_on_rounded, size: 14, color: cs.outline),
-                                                const SizedBox(width: 4),
-                                                Expanded(
-                                                  child: Text(
-                                                    location,
-                                                    style: tt.bodyMedium,
-                                                    maxLines: 1,
-                                                    overflow: TextOverflow.ellipsis,
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                      // Price
-                                      Column(
-                                        crossAxisAlignment: CrossAxisAlignment.end,
-                                        children: [
-                                          Text(
-                                            formattedPrice,
-                                            style: tt.titleLarge?.copyWith(color: cs.primary),
-                                          ),
-                                          Text('/ngày', style: tt.labelMedium),
-                                        ],
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 16),
-                                  
-                                  // Spec tags
-                                  Wrap(
-                                    spacing: 8,
-                                    runSpacing: 8,
-                                    children: [
-                                      _SpecTag(icon: Icons.airline_seat_recline_normal_rounded, label: '$seats chỗ'),
-                                      _SpecTag(icon: Icons.settings_rounded, label: transmission),
-                                      _SpecTag(icon: Icons.star_rounded, label: '${car['averageRating'] ?? 'Mới'}', color: Colors.orange.shade700),
-                                    ],
-                                  ),
-                                ],
+                branchesAsync.maybeWhen(
+                  data: (branches) {
+                    if (branches.isEmpty) return const SizedBox.shrink();
+                    return Padding(
+                      padding: const EdgeInsets.only(right: AppSpacing.sm),
+                      child: DropdownButtonHideUnderline(
+                        child: DropdownButton<int?>(
+                          value: params.branchId,
+                          hint: const Text('Cơ sở'),
+                          isDense: true,
+                          items: [
+                            const DropdownMenuItem<int?>(
+                              value: null,
+                              child: Text('Tất cả cơ sở'),
+                            ),
+                            ...branches.map(
+                              (b) => DropdownMenuItem<int?>(
+                                value: (b['branchId'] as num?)?.toInt(),
+                                child: Text(
+                                  b['name']?.toString() ?? 'Cơ sở',
+                                  overflow: TextOverflow.ellipsis,
+                                ),
                               ),
                             ),
                           ],
+                          onChanged: _setBranchFilter,
                         ),
                       ),
                     );
                   },
+                  orElse: () => const SizedBox.shrink(),
+                ),
+              ],
+            ),
+          ),
+          if (isNearbyMode)
+            AppSurface(
+              color: cs.primaryContainer.withValues(alpha: 0.08),
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.page,
+                vertical: AppSpacing.sm,
+              ),
+              child: Text(
+                'Đang tìm xe trong bán kính 10 km',
+                style: tt.bodySmall?.copyWith(color: cs.primary, fontWeight: FontWeight.w600),
+              ),
+            ),
+          Expanded(
+            child: carsAsync.when(
+              data: (cars) {
+                if (cars.isEmpty) {
+                  return Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(AppSpacing.xxl),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.directions_car_outlined, size: 64, color: cs.outlineVariant),
+                          const SizedBox(height: AppSpacing.lg),
+                          Text('Không tìm thấy xe nào phù hợp', style: tt.titleMedium),
+                          const SizedBox(height: AppSpacing.sm),
+                          Text(
+                            'Thử điều chỉnh bộ lọc hoặc tìm xe gần bạn.',
+                            style: tt.bodyMedium,
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: AppSpacing.xl),
+                          TextButton(onPressed: _resetFilters, child: const Text('Xoá tất cả bộ lọc')),
+                        ],
+                      ),
+                    ),
+                  );
+                }
+                return RefreshIndicator(
+                  onRefresh: () async => ref.invalidate(carListProvider),
+                  child: ListView.separated(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.page,
+                      vertical: AppSpacing.md,
+                    ),
+                    itemCount: cars.length,
+                    separatorBuilder: (context, index) => const SizedBox(height: AppSpacing.md),
+                    itemBuilder: (context, index) {
+                      final car = cars[index];
+                      final title = carDisplayTitle(
+                        car['brand']?.toString(),
+                        car['name']?.toString(),
+                      );
+                      final location = car['location']?.toString() ?? 'Chưa cập nhật';
+                      final seats = car['seats']?.toString() ?? '-';
+                      final priceText = FormatUtils.vndPerDay(car['pricePerDay']);
+
+                      return FadeSlideIn(
+                        delay: Duration(milliseconds: index * 40),
+                        child: AppSurface(
+                          padding: const EdgeInsets.all(AppSpacing.sm),
+                          onTap: () => context.push('/cars/${car['id']}'),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(AppTheme.radiusInput),
+                                child: CachedNetworkImage(
+                                  imageUrl: car['imageUrl']?.toString() ?? '',
+                                  width: 112,
+                                  height: 96,
+                                  fit: BoxFit.cover,
+                                  placeholder: (context, url) => ShimmerLoading(
+                                    width: 112,
+                                    height: 96,
+                                    borderRadius: AppTheme.radiusInput,
+                                  ),
+                                  errorWidget: (context, url, error) => Container(
+                                    width: 112,
+                                    height: 96,
+                                    color: cs.surfaceContainerHigh,
+                                    child: Icon(
+                                      Icons.directions_car_rounded,
+                                      size: 36,
+                                      color: cs.outlineVariant,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: AppSpacing.md),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      title,
+                                      style: tt.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    const SizedBox(height: AppSpacing.xs),
+                                    Text(
+                                      location,
+                                      style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    const SizedBox(height: AppSpacing.sm),
+                                    Text(
+                                      priceText,
+                                      style: tt.labelLarge?.copyWith(
+                                        color: cs.primary,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                    const SizedBox(height: AppSpacing.xs),
+                                    _TextChip(label: '$seats chỗ'),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                );
+              },
+              loading: () => ListView.builder(
+                padding: const EdgeInsets.all(AppSpacing.page),
+                itemCount: 4,
+                itemBuilder: (context, index) => Padding(
+                  padding: const EdgeInsets.only(bottom: AppSpacing.md),
+                  child: AppSurface(
+                    padding: const EdgeInsets.all(AppSpacing.sm),
+                    child: Row(
+                      children: [
+                        ShimmerLoading(width: 112, height: 96, borderRadius: AppTheme.radiusInput),
+                        const SizedBox(width: AppSpacing.md),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              ShimmerLoading(width: double.infinity, height: 16),
+                              const SizedBox(height: AppSpacing.sm),
+                              ShimmerLoading(width: 120, height: 12),
+                              const SizedBox(height: AppSpacing.sm),
+                              ShimmerLoading(width: 90, height: 14),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
               ),
-              loading: () => const Center(child: CircularProgressIndicator()),
-              error: (e, _) => Center(child: Text('Không tải được danh sách xe\n$e', textAlign: TextAlign.center)),
+              error: (e, _) => Padding(
+                padding: const EdgeInsets.all(AppSpacing.xxl),
+                child: Center(
+                  child: Text('Không tải được danh sách xe', textAlign: TextAlign.center, style: tt.bodyLarge),
+                ),
+              ),
             ),
           ),
         ],
@@ -467,34 +682,22 @@ class _CarListScreenState extends ConsumerState<CarListScreen> {
   }
 }
 
-class _SpecTag extends StatelessWidget {
-  const _SpecTag({
-    required this.icon,
-    required this.label,
-    this.color,
-  });
-
-  final IconData icon;
+class _TextChip extends StatelessWidget {
+  const _TextChip({required this.label});
   final String label;
-  final Color? color;
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final fgColor = color ?? cs.onSurfaceVariant;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: AppSpacing.xs),
       decoration: BoxDecoration(
-        color: cs.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(8),
+        color: cs.surfaceContainer,
+        borderRadius: BorderRadius.circular(AppTheme.radiusInput),
       ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 14, color: fgColor),
-          const SizedBox(width: 6),
-          Text(label, style: Theme.of(context).textTheme.labelMedium?.copyWith(color: fgColor)),
-        ],
+      child: Text(
+        label,
+        style: Theme.of(context).textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant),
       ),
     );
   }

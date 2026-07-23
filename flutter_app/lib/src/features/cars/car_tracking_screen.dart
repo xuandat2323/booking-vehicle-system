@@ -110,8 +110,9 @@ class CarTrackingScreen extends ConsumerWidget {
                       ),
                       children: [
                         TileLayer(
-                          urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                          userAgentPackageName: 'vehicle.booking.system',
+                          urlTemplate: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png',
+                          subdomains: const ['a', 'b', 'c', 'd'],
+                          userAgentPackageName: 'com.gorento.app',
                         ),
                         if (pointsList.length > 1)
                           PolylineLayer(

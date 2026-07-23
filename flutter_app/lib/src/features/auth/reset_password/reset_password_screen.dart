@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/auth/auth_provider.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/toast_utils.dart';
 
 class ResetPasswordScreen extends ConsumerStatefulWidget {
   const ResetPasswordScreen({super.key});
@@ -36,12 +37,12 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
             newPassword: _passwordController.text,
           );
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Đặt lại mật khẩu thành công')));
+        ToastUtils.showSuccess(context, 'Đặt lại mật khẩu thành công');
         context.go('/login');
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Đặt lại mật khẩu thất bại: $e')));
+        ToastUtils.showError(context, e);
       }
     }
   }

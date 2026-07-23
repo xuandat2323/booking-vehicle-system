@@ -1,8 +1,12 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/network/dio_provider.dart';
+import '../../core/utils/toast_utils.dart';
+import '../../core/theme/app_spacing.dart';
+import '../../core/widgets/app_ui.dart';
 
 final invoiceListProvider = FutureProvider<List<Map<String, dynamic>>>((ref) async {
   final dio = ref.read(dioProvider);
@@ -12,17 +16,24 @@ final invoiceListProvider = FutureProvider<List<Map<String, dynamic>>>((ref) asy
   return content.cast<Map<String, dynamic>>();
 });
 
-Color _invoiceStatusColor(String status) {
+Color _invoiceStatusColor(String status, ColorScheme cs) {
   switch (status) {
     case 'PAID':
-      return Colors.green;
+      return cs.tertiary;
     case 'UNPAID':
-      return Colors.orange;
+      return cs.secondary;
     case 'CANCELLED':
-      return Colors.red;
+      return cs.error;
     default:
-      return Colors.grey;
+      return cs.outline;
   }
+}
+
+String _loadErrorMessage(Object error) {
+  if (error is DioException && error.response?.statusCode == 403) {
+    return 'Tài khoản admin không xem đơn cá nhân — dùng tab Quản trị.';
+  }
+  return ToastUtils.mapError(error);
 }
 
 String _invoiceStatusLabel(String status) {
@@ -44,13 +55,16 @@ class InvoiceListScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final invoicesAsync = ref.watch(invoiceListProvider);
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Hoá đơn của tôi'),
         actions: [
           IconButton(
             onPressed: () => ref.invalidate(invoiceListProvider),
-            icon: const Icon(Icons.refresh),
+            icon: const Icon(Icons.refresh_rounded),
           ),
         ],
       ),
@@ -58,97 +72,84 @@ class InvoiceListScreen extends ConsumerWidget {
         data: (invoices) {
           if (invoices.isEmpty) {
             return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.receipt_outlined, size: 64, color: Colors.grey[400]),
-                  const SizedBox(height: 16),
-                  Text('Chưa có hoá đơn nào', style: TextStyle(color: Colors.grey[600], fontSize: 16)),
-                ],
+              child: Padding(
+                padding: const EdgeInsets.all(AppSpacing.xxl),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.receipt_outlined, size: 64, color: cs.outlineVariant),
+                    const SizedBox(height: AppSpacing.lg),
+                    Text('Chưa có hoá đơn nào', style: tt.titleMedium),
+                  ],
+                ),
               ),
             );
           }
           return RefreshIndicator(
             onRefresh: () async => ref.invalidate(invoiceListProvider),
             child: ListView.separated(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(AppSpacing.page),
               itemCount: invoices.length,
-              separatorBuilder: (_, _) => const SizedBox(height: 12),
+              separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.md),
               itemBuilder: (context, index) {
                 final invoice = invoices[index];
                 final status = invoice['invoiceStatus']?.toString() ?? '';
-                final statusColor = _invoiceStatusColor(status);
-                return Card(
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(16),
+                final statusColor = _invoiceStatusColor(status, cs);
+                return FadeSlideIn(
+                  delay: Duration(milliseconds: 40 * index),
+                  child: AppSurface(
                     onTap: () => context.push('/invoices/${invoice['invoiceId']}'),
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.all(8),
-                                decoration: BoxDecoration(
-                                  color: statusColor.withValues(alpha: 0.1),
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                                child: Icon(Icons.receipt, color: statusColor, size: 20),
+                    color: cs.surfaceContainerLowest,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(Icons.receipt_long_rounded, color: statusColor, size: 22),
+                            const SizedBox(width: AppSpacing.md),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    invoice['invoiceNumber']?.toString() ?? '',
+                                    style: tt.titleSmall,
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    invoice['carName']?.toString() ?? '',
+                                    style: tt.bodySmall,
+                                  ),
+                                ],
                               ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      invoice['invoiceNumber']?.toString() ?? '',
-                                      style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
-                                    ),
-                                    Text(
-                                      invoice['carName']?.toString() ?? '',
-                                      style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.grey[600]),
-                                    ),
-                                  ],
-                                ),
+                            ),
+                            Text(
+                              _invoiceStatusLabel(status),
+                              style: tt.labelSmall?.copyWith(
+                                color: statusColor,
+                                fontWeight: FontWeight.w700,
                               ),
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                decoration: BoxDecoration(
-                                  color: statusColor.withValues(alpha: 0.12),
-                                  borderRadius: BorderRadius.circular(20),
-                                ),
-                                child: Text(
-                                  _invoiceStatusLabel(status),
-                                  style: TextStyle(color: statusColor, fontSize: 12, fontWeight: FontWeight.w600),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 12),
-                          Row(
-                            children: [
-                              const Icon(Icons.calendar_today, size: 14, color: Colors.grey),
-                              const SizedBox(width: 6),
-                              Text(
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: AppSpacing.md),
+                        Row(
+                          children: [
+                            Icon(Icons.calendar_today_outlined, size: 14, color: cs.outline),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
                                 '${invoice['startDate']} → ${invoice['endDate']}',
-                                style: Theme.of(context).textTheme.bodySmall,
+                                style: tt.bodySmall,
                               ),
-                              const Spacer(),
-                              Text(
-                                '${invoice['totalAmount'] ?? ''} ₫',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  color: Theme.of(context).colorScheme.primary,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
+                            ),
+                            Text(
+                              '${invoice['totalAmount'] ?? ''} ₫',
+                              style: tt.titleSmall?.copyWith(color: cs.primary),
+                            ),
+                          ],
+                        ),
+                      ],
                     ),
                   ),
                 );
@@ -158,18 +159,27 @@ class InvoiceListScreen extends ConsumerWidget {
         },
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.error_outline, size: 48, color: Colors.red),
-              const SizedBox(height: 16),
-              Text('Không tải được hoá đơn: $e', textAlign: TextAlign.center),
-              const SizedBox(height: 16),
-              ElevatedButton(
-                onPressed: () => ref.invalidate(invoiceListProvider),
-                child: const Text('Thử lại'),
-              ),
-            ],
+          child: Padding(
+            padding: const EdgeInsets.all(AppSpacing.xxl),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.error_outline, size: 48, color: cs.error),
+                const SizedBox(height: AppSpacing.lg),
+                Text('Không tải được hoá đơn', style: tt.titleMedium),
+                const SizedBox(height: AppSpacing.sm),
+                Text(
+                  _loadErrorMessage(e),
+                  textAlign: TextAlign.center,
+                  style: tt.bodyMedium,
+                ),
+                const SizedBox(height: AppSpacing.lg),
+                FilledButton(
+                  onPressed: () => ref.invalidate(invoiceListProvider),
+                  child: const Text('Thử lại'),
+                ),
+              ],
+            ),
           ),
         ),
       ),
