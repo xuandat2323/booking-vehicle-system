@@ -78,13 +78,13 @@ class BookingDetailScreen extends ConsumerWidget {
           _refreshLists(ref);
           if (context.mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Thanh toán thành công!')),
+              const SnackBar(content: Text('Đặt cọc thành công!')),
             );
           }
         } else if (success == false) {
           if (context.mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Thanh toán thất bại hoặc đã bị hủy')),
+              const SnackBar(content: Text('Đặt cọc thất bại hoặc đã bị hủy')),
             );
           }
         }
@@ -122,7 +122,8 @@ class BookingDetailScreen extends ConsumerWidget {
       case 'PENDING': return 'Chờ đặt cọc';
       case 'DEPOSIT_PAID': return 'Đã đặt cọc (Chờ duyệt)';
       case 'CONFIRMED': return 'Đã xác nhận';
-      case 'RENTING': return 'Đang thuê';
+      case 'RENTING':
+      case 'IN_PROGRESS': return 'Đang thuê';
       case 'RETURNED': return 'Đã trả xe';
       case 'COMPLETED': return 'Hoàn thành';
       case 'CANCELLED': return 'Đã hủy';
@@ -135,12 +136,55 @@ class BookingDetailScreen extends ConsumerWidget {
       case 'PENDING': return cs.secondary;
       case 'DEPOSIT_PAID': return Colors.orange;
       case 'CONFIRMED': return cs.primary;
-      case 'RENTING': return const Color(0xFF6750A4);
+      case 'RENTING':
+      case 'IN_PROGRESS': return const Color(0xFF6750A4);
       case 'RETURNED': return Colors.teal;
       case 'COMPLETED': return cs.tertiaryContainer;
       case 'CANCELLED': return cs.error;
       default: return cs.outline;
     }
+  }
+
+  /// Banner lưu ý theo từng trạng thái đơn (phía khách).
+  (IconData, Color, String)? _statusNotice(String status, ColorScheme cs) {
+    return switch (status) {
+      'PENDING' => (
+          Icons.info_outline_rounded,
+          cs.secondary,
+          'Đơn đã tạo. Đặt cọc 30% để giữ xe. Phần còn lại thanh toán khi kết thúc chuyến.',
+        ),
+      'DEPOSIT_PAID' => (
+          Icons.hourglass_top_rounded,
+          Colors.orange,
+          'Đã nhận cọc thành công. Vui lòng chờ admin duyệt đơn giữ xe.',
+        ),
+      'CONFIRMED' => (
+          Icons.check_circle_outline_rounded,
+          cs.primary,
+          'Admin đã duyệt đơn. Đến chi nhánh nhận xe đúng lịch đã đặt.',
+        ),
+      'RENTING' || 'IN_PROGRESS' => (
+          Icons.directions_car_filled_rounded,
+          const Color(0xFF6750A4),
+          'Bạn đang thuê xe. Khi trả xe, hãy đến điểm trả đã chọn và bấm Trả xe.',
+        ),
+      'RETURNED' => (
+          Icons.pending_actions_rounded,
+          Colors.teal,
+          'Đã ghi nhận trả xe. Vui lòng chờ admin chốt thanh toán phần còn lại và hoàn cọc.',
+        ),
+      'COMPLETED' => (
+          Icons.task_alt_rounded,
+          cs.tertiaryContainer,
+          'Chuyến đi đã hoàn tất. Cảm ơn bạn đã sử dụng GoRento!',
+        ),
+      'CANCELLED' => (
+          Icons.cancel_outlined,
+          cs.error,
+          'Đơn đã bị hủy. Xe không còn được giữ cho bạn.',
+        ),
+      _ => null,
+    };
   }
 
   @override
@@ -155,6 +199,7 @@ class BookingDetailScreen extends ConsumerWidget {
         data: (booking) {
           final status = booking['status']?.toString() ?? '';
           final statusColor = _statusColor(status, cs);
+          final notice = _statusNotice(status, cs);
           
           final priceStr = booking['totalPrice']?.toString() ?? '0';
           int? priceInt = int.tryParse(priceStr.split('.').first);
@@ -287,7 +332,37 @@ class BookingDetailScreen extends ConsumerWidget {
                     ],
                   ),
                 ),
-                const SizedBox(height: 32),
+                const SizedBox(height: 24),
+
+                // Lưu ý theo trạng thái
+                if (notice != null) ...[
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: notice.$2.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(AppTheme.radiusCard),
+                      border: Border.all(color: notice.$2.withValues(alpha: 0.3)),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(notice.$1, color: notice.$2),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            notice.$3,
+                            style: tt.bodyMedium?.copyWith(
+                              color: notice.$2,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                ],
 
                 // Actions
                 if (status == 'PENDING' || status == 'CONFIRMED') ...[
@@ -311,9 +386,9 @@ class BookingDetailScreen extends ConsumerWidget {
                     child: const Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.payment_rounded, color: Colors.white),
+                        Icon(Icons.payments_rounded, color: Colors.white),
                         SizedBox(width: 8),
-                        Text('Đặt cọc giữ xe (VNPay)', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 16)),
+                        Text('Đặt cọc giữ xe (30%)', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 16)),
                       ],
                     ),
                   ),
@@ -328,30 +403,6 @@ class BookingDetailScreen extends ConsumerWidget {
                         foregroundColor: cs.error,
                         side: BorderSide(color: cs.error.withValues(alpha: 0.3)),
                       ),
-                    ),
-                  ),
-                ],
-
-                if (status == 'DEPOSIT_PAID') ...[
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Colors.orange.withValues(alpha: 0.08),
-                      borderRadius: BorderRadius.circular(AppTheme.radiusCard),
-                      border: Border.all(color: Colors.orange.withValues(alpha: 0.3)),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.hourglass_empty_rounded, color: Colors.orange),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Text(
-                            'Bạn đã đặt cọc thành công. Vui lòng chờ Admin phê duyệt hồ sơ lái xe của bạn.',
-                            style: tt.bodyMedium?.copyWith(color: Colors.orange.shade900, fontWeight: FontWeight.w500),
-                          ),
-                        ),
-                      ],
                     ),
                   ),
                 ],

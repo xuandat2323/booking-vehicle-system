@@ -6,6 +6,7 @@ import 'package:dio/dio.dart';
 
 import '../../core/network/dio_provider.dart';
 import '../../core/theme/app_theme.dart';
+import '../profile/profile_screen.dart' show userProfileProvider;
 import 'verification_provider.dart';
 
 export 'verification_provider.dart';
@@ -137,6 +138,8 @@ class _VerificationScreenState extends ConsumerState<VerificationScreen> {
 
       if (!mounted) return;
       ref.invalidate(verificationStatusProvider);
+      // Đồng bộ số GPLX sang hồ sơ → refresh màn Tài khoản.
+      ref.invalidate(userProfileProvider);
 
       final isSpoofed = data['isSpoofed'] == true;
       final ocrOk = data['ocrSuccess'] == true;

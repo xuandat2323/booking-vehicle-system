@@ -4,7 +4,9 @@ import vehicle.booking.dto.request.ChangePasswordRequest;
 import vehicle.booking.dto.request.UpdateProfileRequest;
 import vehicle.booking.dto.response.UserResponse;
 import vehicle.booking.entity.User;
+import vehicle.booking.entity.UserVerification;
 import vehicle.booking.repository.UserRepository;
+import vehicle.booking.repository.UserVerificationRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.authentication.BadCredentialsException;
@@ -19,6 +21,9 @@ public class UserService {
 
     @Autowired
     private UserRepository userRepository;
+
+    @Autowired
+    private UserVerificationRepository verificationRepository;
 
     @Autowired
     private PasswordEncoder passwordEncoder;
@@ -57,12 +62,30 @@ public class UserService {
         }
 
         User user = userOpt.get();
+        return toResponse(user);
+    }
+
+    /** Ưu tiên driveLicense trên user; nếu trống thì lấy số GPLX đã OCR từ eKYC. */
+    private UserResponse toResponse(User user) {
+        String driveLicense = user.getDriveLicense();
+        if (driveLicense == null || driveLicense.isBlank()) {
+            Optional<UserVerification> vOpt = verificationRepository.findByUserUserId(user.getUserId());
+            if (vOpt.isPresent()) {
+                UserVerification v = vOpt.get();
+                if (v.getLicenseNumber() != null && !v.getLicenseNumber().isBlank()) {
+                    driveLicense = v.getLicenseNumber();
+                    // Backfill để lần sau không cần fallback.
+                    user.setDriveLicense(driveLicense);
+                    userRepository.save(user);
+                }
+            }
+        }
         return new UserResponse(
                 user.getUserId(),
                 user.getName(),
                 user.getEmail(),
                 user.getPhone(),
-                user.getDriveLicense(),
+                driveLicense,
                 user.getRole()
         );
     }
@@ -90,14 +113,7 @@ public class UserService {
 
         log.info("Profile updated successfully for phone: {}", phone);
 
-        return new UserResponse(
-                user.getUserId(),
-                user.getName(),
-                user.getEmail(),
-                user.getPhone(),
-                user.getDriveLicense(),
-                user.getRole()
-        );
+        return toResponse(user);
     }
 
 }

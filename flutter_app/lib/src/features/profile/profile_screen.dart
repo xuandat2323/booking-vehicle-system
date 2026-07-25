@@ -129,13 +129,16 @@ class ProfileScreen extends ConsumerWidget {
                                       name: name.toString(),
                                       email: email.toString(),
                                       license: license.toString(),
+                                      showLicense: !isAdmin,
                                     ),
                                   ),
                                   _buildInfoRow(context, Icons.phone_iphone_rounded, 'Số điện thoại', phone),
                                   const SizedBox(height: AppSpacing.lg),
                                   _buildInfoRow(context, Icons.email_rounded, 'Email liên hệ', email),
-                                  const SizedBox(height: AppSpacing.lg),
-                                  _buildInfoRow(context, Icons.badge_rounded, 'Bằng lái xe', license),
+                                  if (!isAdmin) ...[
+                                    const SizedBox(height: AppSpacing.lg),
+                                    _buildInfoRow(context, Icons.badge_rounded, 'Bằng lái xe', license),
+                                  ],
                                 ],
                               ),
                             ),
@@ -229,12 +232,14 @@ class ProfileScreen extends ConsumerWidget {
 
                           const SizedBox(height: AppSpacing.section),
                           const SectionHeader(title: 'Tài khoản'),
-                          OutlinedButton.icon(
-                            onPressed: () => context.push('/change-password'),
-                            icon: const Icon(Icons.lock_reset_rounded),
-                            label: const Text('Đổi mật khẩu'),
-                          ),
-                          const SizedBox(height: AppSpacing.md),
+                          if (!isAdmin) ...[
+                            OutlinedButton.icon(
+                              onPressed: () => context.push('/change-password'),
+                              icon: const Icon(Icons.lock_reset_rounded),
+                              label: const Text('Đổi mật khẩu'),
+                            ),
+                            const SizedBox(height: AppSpacing.md),
+                          ],
                           OutlinedButton.icon(
                             onPressed: () async {
                               await ref.read(authControllerProvider).logout();
@@ -287,6 +292,7 @@ class ProfileScreen extends ConsumerWidget {
     required String name,
     required String email,
     required String license,
+    required bool showLicense,
   }) {
     String clean(String v) => v == 'Chưa cập nhật' ? '' : v;
     showDialog<bool>(
@@ -296,6 +302,7 @@ class ProfileScreen extends ConsumerWidget {
         initialName: clean(name),
         initialEmail: clean(email),
         initialLicense: clean(license),
+        showLicense: showLicense,
       ),
     ).then((saved) {
       if (saved == true) ref.invalidate(userProfileProvider);
@@ -337,11 +344,13 @@ class _EditProfileDialog extends ConsumerStatefulWidget {
     required this.initialName,
     required this.initialEmail,
     required this.initialLicense,
+    required this.showLicense,
   });
 
   final String initialName;
   final String initialEmail;
   final String initialLicense;
+  final bool showLicense;
 
   @override
   ConsumerState<_EditProfileDialog> createState() => _EditProfileDialogState();
@@ -374,11 +383,14 @@ class _EditProfileDialogState extends ConsumerState<_EditProfileDialog> {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _saving = true);
     try {
-      await ref.read(dioProvider).put('/api/user/me', data: {
+      final data = <String, dynamic>{
         'name': _nameController.text.trim(),
         'email': _emailController.text.trim(),
-        'driveLicense': _licenseController.text.trim(),
-      });
+      };
+      if (widget.showLicense) {
+        data['driveLicense'] = _licenseController.text.trim();
+      }
+      await ref.read(dioProvider).put('/api/user/me', data: data);
       if (mounted) {
         ToastUtils.showSuccess(context, 'Cập nhật thông tin thành công');
         Navigator.of(context).pop(true);
@@ -423,15 +435,17 @@ class _EditProfileDialogState extends ConsumerState<_EditProfileDialog> {
                   return ok ? null : 'Email không hợp lệ';
                 },
               ),
-              const SizedBox(height: AppSpacing.md),
-              TextFormField(
-                controller: _licenseController,
-                textCapitalization: TextCapitalization.characters,
-                decoration: const InputDecoration(
-                  labelText: 'Số bằng lái xe',
-                  prefixIcon: Icon(Icons.badge_outlined),
+              if (widget.showLicense) ...[
+                const SizedBox(height: AppSpacing.md),
+                TextFormField(
+                  controller: _licenseController,
+                  textCapitalization: TextCapitalization.characters,
+                  decoration: const InputDecoration(
+                    labelText: 'Số bằng lái xe',
+                    prefixIcon: Icon(Icons.badge_outlined),
+                  ),
                 ),
-              ),
+              ],
             ],
           ),
         ),

@@ -234,6 +234,12 @@ public class VerificationController {
         }
         v.setLicenseVerified(verified);
 
+        // Đồng bộ số GPLX sang hồ sơ user để màn Tài khoản không còn "Chưa cập nhật".
+        if (verified && licId != null && !licId.isBlank()) {
+            user.setDriveLicense(licId);
+            userRepository.save(user);
+        }
+
         updateOverallStatus(v);
         verificationRepository.save(v);
 
