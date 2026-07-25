@@ -1,66 +1,64 @@
 -- ============================================================
 -- MIGRATION: Clean reseed of car catalog
--- Root cause fixed: migration 010 tried to UPDATE car_id=6/7 with
--- owner_id/coordinates BEFORE those rows existed (they were only
--- created later in the same file by auto-increment), so the update
--- silently affected 0 rows, and the two matching car_image INSERTs
--- were left commented out entirely. Net effect: some cars ended up
--- with no branch, no image, and a stray "owner" account/channel.
---
--- This migration wipes the previous car/image/booking demo data and
--- reseeds cleanly: every car gets a valid branch_id, a primary image,
--- complete created_at/updated_at, and NO owner_id (the peer-to-peer
--- "cho thuê xe" channel is being removed from the product entirely).
 -- ============================================================
 
 -- 1. Clear dependent data (FK-safe order)
 DELETE FROM vehicle_tracking_location;
 DELETE FROM payment;
 DELETE FROM invoice;
-DELETE FROM reviews;
+-- DELETE FROM reviews; -- Removed: table 'reviews' is not yet created in the migration history
 DELETE FROM booking;
 DELETE FROM car_image;
 DELETE FROM car;
 
--- 2. Remove the demo "owner" account — no owner/rental channel in the new data.
---    refresh_token / password_reset_token have plain FKs to users (no ON DELETE
---    CASCADE), so clear those first or the DELETE below fails if the demo owner
---    ever logged in. user_verifications already cascades, no action needed there.
+-- 2. Đảm bảo dữ liệu Chi nhánh (Branch) tồn tại
+-- Sử dụng INSERT SELECT ... WHERE NOT EXISTS để tránh trùng lặp nếu chạy lại
+INSERT INTO `branch` (`name`, `address`, `phone`, `latitude`, `longitude`, `is_active`)
+SELECT 'GoRento Hoàn Kiếm', 'Số 1 Tràng Tiền, Hoàn Kiếm, Hà Nội', '0901111222', 21.0285000, 105.8542000, b'1'
+WHERE NOT EXISTS (SELECT 1 FROM `branch` WHERE `name` = 'GoRento Hoàn Kiếm');
+
+INSERT INTO `branch` (`name`, `address`, `phone`, `latitude`, `longitude`, `is_active`)
+SELECT 'GoRento Cầu Giấy', 'Số 15 Duy Tân, Cầu Giấy, Hà Nội', '0901111333', 21.0340000, 105.7980000, b'1'
+WHERE NOT EXISTS (SELECT 1 FROM `branch` WHERE `name` = 'GoRento Cầu Giấy');
+
+INSERT INTO `branch` (`name`, `address`, `phone`, `latitude`, `longitude`, `is_active`)
+SELECT 'GoRento Thanh Xuân', 'Số 201 Nguyễn Trãi, Thanh Xuân, Hà Nội', '0901111444', 20.9985000, 105.8194000, b'1'
+WHERE NOT EXISTS (SELECT 1 FROM `branch` WHERE `name` = 'GoRento Thanh Xuân');
+
+-- 3. Xóa tài khoản demo Owner cũ (vì hệ thống mới chỉ dùng ADMIN/USER)
 DELETE FROM refresh_token WHERE user_id = (SELECT user_id FROM users WHERE email = 'owner@autorent.com');
 DELETE FROM password_reset_token WHERE user_id = (SELECT user_id FROM users WHERE email = 'owner@autorent.com');
 DELETE FROM users WHERE email = 'owner@autorent.com';
 
--- 3. Reseed cars — every row has branch_id set, owner_id left NULL,
---    and created_at/updated_at populated (previously NULL for seed cars).
+-- 4. Reseed 18 chiếc xe với Branch ID động
 INSERT INTO car (
     name, brand, model, license_plate, price_per_day, status,
     seats, transmission, fuel_type, location, latitude, longitude,
     location_source, branch_id, created_at, updated_at
 ) VALUES
--- Branch 1: GoRento Hoàn Kiếm
-('VinFast VF8 Plus',         'VinFast',       'VF8',             '30K-123.45', 1200000, 'AVAILABLE', 5, 'AUTOMATIC', 'ELECTRIC', 'Hoàn Kiếm, Hà Nội',    21.0285, 105.8542, 'manual', 1, NOW(), NOW()),
-('Toyota Camry 2.5Q',        'Toyota',        'Camry',           '30E-888.99', 1500000, 'AVAILABLE', 5, 'AUTOMATIC', 'GASOLINE', 'Hoàn Kiếm, Hà Nội',    21.0310, 105.8520, 'manual', 1, NOW(), NOW()),
-('Mercedes-Benz C200',       'Mercedes-Benz', 'C200',            '30E-777.11', 3500000, 'AVAILABLE', 5, 'AUTOMATIC', 'GASOLINE', 'Hoàn Kiếm, Hà Nội',    21.0295, 105.8530, 'manual', 1, NOW(), NOW()),
-('Audi Q5 2.0 TFSI',         'Audi',          'Q5',              '30F-999.11', 4000000, 'AVAILABLE', 5, 'AUTOMATIC', 'GASOLINE', 'Hai Bà Trưng, Hà Nội', 21.0230, 105.8490, 'manual', 1, NOW(), NOW()),
-('Honda CR-V G',             'Honda',         'CR-V',            '30C-222.44', 1100000, 'AVAILABLE', 5, 'AUTOMATIC', 'GASOLINE', 'Ba Đình, Hà Nội',      21.0390, 105.8290, 'manual', 1, NOW(), NOW()),
-('Mazda CX-5 Premium',       'Mazda',         'CX-5',            '43A-555.55', 1000000, 'AVAILABLE', 5, 'AUTOMATIC', 'GASOLINE', 'Đống Đa, Hà Nội',      21.0130, 105.8460, 'manual', 1, NOW(), NOW()),
--- Branch 2: GoRento Cầu Giấy
-('KIA K3 Premium',           'KIA',           'K3',              '30H-456.78', 750000,  'AVAILABLE', 5, 'AUTOMATIC', 'GASOLINE', 'Cầu Giấy, Hà Nội',     21.0340, 105.7980, 'manual', 2, NOW(), NOW()),
-('Hyundai Elantra Sport',    'Hyundai',       'Elantra',         '29A-234.56', 850000,  'AVAILABLE', 5, 'AUTOMATIC', 'GASOLINE', 'Nam Từ Liêm, Hà Nội',  21.0180, 105.7650, 'manual', 2, NOW(), NOW()),
-('VinFast VF9 Plus',         'VinFast',       'VF9',             '30K-999.88', 2000000, 'AVAILABLE', 7, 'AUTOMATIC', 'ELECTRIC', 'Mỹ Đình, Hà Nội',      21.0278, 105.7720, 'manual', 2, NOW(), NOW()),
-('VinFast VF6',              'VinFast',       'VF6',             '30K-111.22', 800000,  'AVAILABLE', 5, 'AUTOMATIC', 'ELECTRIC', 'Bắc Từ Liêm, Hà Nội',  21.0690, 105.7880, 'manual', 2, NOW(), NOW()),
-('BMW 320i',                 'BMW',           '320i',            '30F-777.66', 3200000, 'AVAILABLE', 5, 'AUTOMATIC', 'GASOLINE', 'Cầu Giấy, Hà Nội',     21.0355, 105.7940, 'manual', 2, NOW(), NOW()),
-('Suzuki Ertiga Hybrid',     'Suzuki',        'Ertiga',          '30B-654.32', 700000,  'AVAILABLE', 7, 'AUTOMATIC', 'HYBRID',   'Từ Liêm, Hà Nội',      21.0430, 105.7600, 'manual', 2, NOW(), NOW()),
--- Branch 3: GoRento Thanh Xuân
-('Ford Ranger Wildtrak',     'Ford',          'Ranger Wildtrak', '29D-456.78', 1400000, 'AVAILABLE', 5, 'AUTOMATIC', 'DIESEL',   'Thanh Xuân, Hà Nội',   20.9985, 105.8194, 'manual', 3, NOW(), NOW()),
-('Mitsubishi Xpander Cross', 'Mitsubishi',    'Xpander',         '60A-777.77', 800000,  'AVAILABLE', 7, 'AUTOMATIC', 'GASOLINE', 'Hà Đông, Hà Nội',      20.9620, 105.7790, 'manual', 3, NOW(), NOW()),
-('Toyota Fortuner Legender', 'Toyota',        'Fortuner',        '30G-555.44', 1800000, 'AVAILABLE', 7, 'AUTOMATIC', 'DIESEL',   'Thanh Trì, Hà Nội',    20.9500, 105.8400, 'manual', 3, NOW(), NOW()),
-('Hyundai Santa Fe Premium', 'Hyundai',       'Santa Fe',        '30H-333.22', 1600000, 'AVAILABLE', 7, 'AUTOMATIC', 'GASOLINE', 'Thanh Xuân, Hà Nội',   21.0000, 105.8210, 'manual', 3, NOW(), NOW()),
-('KIA Sorento 2.2D',         'KIA',           'Sorento',         '29C-111.33', 1500000, 'AVAILABLE', 7, 'AUTOMATIC', 'DIESEL',   'Hoàng Mai, Hà Nội',    20.9850, 105.8720, 'manual', 3, NOW(), NOW()),
-('Mazda2 Sport',             'Mazda',         'Mazda2',          '29E-789.12', 600000,  'AVAILABLE', 5, 'AUTOMATIC', 'GASOLINE', 'Thanh Xuân, Hà Nội',   20.9970, 105.8180, 'manual', 3, NOW(), NOW());
+-- Nhánh Hoàn Kiếm
+('VinFast VF8 Plus', 'VinFast', 'VF8', '30K-123.45', 1200000, 'AVAILABLE', 5, 'AUTOMATIC', 'ELECTRIC', 'Hoàn Kiếm, Hà Nội', 21.0285, 105.8542, 'manual', (SELECT branch_id FROM branch WHERE name = 'GoRento Hoàn Kiếm'), NOW(), NOW()),
+('Toyota Camry 2.5Q', 'Toyota', 'Camry', '30E-888.99', 1500000, 'AVAILABLE', 5, 'AUTOMATIC', 'GASOLINE', 'Hoàn Kiếm, Hà Nội', 21.0310, 105.8520, 'manual', (SELECT branch_id FROM branch WHERE name = 'GoRento Hoàn Kiếm'), NOW(), NOW()),
+('Mercedes-Benz C200', 'Mercedes-Benz', 'C200', '30E-777.11', 3500000, 'AVAILABLE', 5, 'AUTOMATIC', 'GASOLINE', 'Hoàn Kiếm, Hà Nội', 21.0295, 105.8530, 'manual', (SELECT branch_id FROM branch WHERE name = 'GoRento Hoàn Kiếm'), NOW(), NOW()),
+('Audi Q5 2.0 TFSI', 'Audi', 'Q5', '30F-999.11', 4000000, 'AVAILABLE', 5, 'AUTOMATIC', 'GASOLINE', 'Hai Bà Trưng, Hà Nội', 21.0230, 105.8490, 'manual', (SELECT branch_id FROM branch WHERE name = 'GoRento Hoàn Kiếm'), NOW(), NOW()),
+('Honda CR-V G', 'Honda', 'CR-V', '30C-222.44', 1100000, 'AVAILABLE', 5, 'AUTOMATIC', 'GASOLINE', 'Ba Đình, Hà Nội', 21.0390, 105.8290, 'manual', (SELECT branch_id FROM branch WHERE name = 'GoRento Hoàn Kiếm'), NOW(), NOW()),
+('Mazda CX-5 Premium', 'Mazda', 'CX-5', '43A-555.55', 1000000, 'AVAILABLE', 5, 'AUTOMATIC', 'GASOLINE', 'Đống Đa, Hà Nội', 21.0130, 105.8460, 'manual', (SELECT branch_id FROM branch WHERE name = 'GoRento Hoàn Kiếm'), NOW(), NOW()),
+-- Nhánh Cầu Giấy
+('KIA K3 Premium', 'KIA', 'K3', '30H-456.78', 750000, 'AVAILABLE', 5, 'AUTOMATIC', 'GASOLINE', 'Cầu Giấy, Hà Nội', 21.0340, 105.7980, 'manual', (SELECT branch_id FROM branch WHERE name = 'GoRento Cầu Giấy'), NOW(), NOW()),
+('Hyundai Elantra Sport', 'Hyundai', 'Elantra', '29A-234.56', 850000, 'AVAILABLE', 5, 'AUTOMATIC', 'GASOLINE', 'Nam Từ Liêm, Hà Nội', 21.0180, 105.7650, 'manual', (SELECT branch_id FROM branch WHERE name = 'GoRento Cầu Giấy'), NOW(), NOW()),
+('VinFast VF9 Plus', 'VinFast', 'VF9', '30K-999.88', 2000000, 'AVAILABLE', 7, 'AUTOMATIC', 'ELECTRIC', 'Mỹ Đình, Hà Nội', 21.0278, 105.7720, 'manual', (SELECT branch_id FROM branch WHERE name = 'GoRento Cầu Giấy'), NOW(), NOW()),
+('VinFast VF6', 'VinFast', 'VF6', '30K-111.22', 800000, 'AVAILABLE', 5, 'AUTOMATIC', 'ELECTRIC', 'Bắc Từ Liêm, Hà Nội', 21.0690, 105.7880, 'manual', (SELECT branch_id FROM branch WHERE name = 'GoRento Cầu Giấy'), NOW(), NOW()),
+('BMW 320i', 'BMW', '320i', '30F-777.66', 3200000, 'AVAILABLE', 5, 'AUTOMATIC', 'GASOLINE', 'Cầu Giấy, Hà Nội', 21.0355, 105.7940, 'manual', (SELECT branch_id FROM branch WHERE name = 'GoRento Cầu Giấy'), NOW(), NOW()),
+('Suzuki Ertiga Hybrid', 'Suzuki', 'Ertiga', '30B-654.32', 700000, 'AVAILABLE', 7, 'AUTOMATIC', 'HYBRID', 'Từ Liêm, Hà Nội', 21.0430, 105.7600, 'manual', (SELECT branch_id FROM branch WHERE name = 'GoRento Cầu Giấy'), NOW(), NOW()),
+-- Nhánh Thanh Xuân
+('Ford Ranger Wildtrak', 'Ford', 'Ranger Wildtrak', '29D-456.78', 1400000, 'AVAILABLE', 5, 'AUTOMATIC', 'DIESEL', 'Thanh Xuân, Hà Nội', 20.9985, 105.8194, 'manual', (SELECT branch_id FROM branch WHERE name = 'GoRento Thanh Xuân'), NOW(), NOW()),
+('Mitsubishi Xpander Cross', 'Mitsubishi', 'Xpander', '60A-777.77', 800000, 'AVAILABLE', 7, 'AUTOMATIC', 'GASOLINE', 'Hà Đông, Hà Nội', 20.9620, 105.7790, 'manual', (SELECT branch_id FROM branch WHERE name = 'GoRento Thanh Xuân'), NOW(), NOW()),
+('Toyota Fortuner Legender', 'Toyota', 'Fortuner', '30G-555.44', 1800000, 'AVAILABLE', 7, 'AUTOMATIC', 'DIESEL', 'Thanh Trì, Hà Nội', 20.9500, 105.8400, 'manual', (SELECT branch_id FROM branch WHERE name = 'GoRento Thanh Xuân'), NOW(), NOW()),
+('Hyundai Santa Fe Premium', 'Hyundai', 'Santa Fe', '30H-333.22', 1600000, 'AVAILABLE', 7, 'AUTOMATIC', 'GASOLINE', 'Thanh Xuân, Hà Nội', 21.0000, 105.8210, 'manual', (SELECT branch_id FROM branch WHERE name = 'GoRento Thanh Xuân'), NOW(), NOW()),
+('KIA Sorento 2.2D', 'KIA', 'Sorento', '29C-111.33', 1500000, 'AVAILABLE', 7, 'AUTOMATIC', 'DIESEL', 'Hoàng Mai, Hà Nội', 20.9850, 105.8720, 'manual', (SELECT branch_id FROM branch WHERE name = 'GoRento Thanh Xuân'), NOW(), NOW()),
+('Mazda2 Sport', 'Mazda', 'Mazda2', '29E-789.12', 600000, 'AVAILABLE', 5, 'AUTOMATIC', 'GASOLINE', 'Thanh Xuân, Hà Nội', 20.9970, 105.8180, 'manual', (SELECT branch_id FROM branch WHERE name = 'GoRento Thanh Xuân'), NOW(), NOW());
 
--- 4. Primary image for EVERY car (matched by license_plate — robust to
---    whatever car_id auto-increment assigns after the DELETE above)
+-- 5. Đổ ảnh cho từng xe dựa trên biển số xe
 INSERT INTO car_image (car_id, image_url, public_id, format, bytes, is_primary, sort_order, created_at, updated_at)
 SELECT c.car_id,
     CASE c.license_plate

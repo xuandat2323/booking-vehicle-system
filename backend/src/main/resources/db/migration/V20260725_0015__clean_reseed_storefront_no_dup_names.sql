@@ -7,8 +7,8 @@
 DELETE FROM vehicle_tracking_location;
 DELETE FROM payment;
 DELETE FROM invoice;
-DELETE FROM reviews;
-DELETE FROM notification;
+-- DELETE FROM reviews; -- Removed: table 'reviews' is not yet created in the migration history
+-- DELETE FROM notification; -- Removed: table 'notification' is not yet created in the migration history
 DELETE FROM booking;
 DELETE FROM car_image;
 DELETE FROM car;
