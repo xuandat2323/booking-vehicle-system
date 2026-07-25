@@ -85,6 +85,9 @@ payos.account-name=${PAYOS_ACCOUNT_NAME:CONG TY GORENTO}
 # Goong Maps — from backend/.env
 goong.api-key=${GOONG_API_KEY:YOUR_GOONG_API_KEY}
 
+# Gemini chatbot — from backend/.env
+gemini.api-key=${GEMINI_API_KEY:}
+
 # eKYC — OCR thật qua ekyc-service (EasyOCR). Đổi mock chỉ khi demo offline.
 ekyc.mode=local
 ekyc.local-service-url=http://localhost:8001

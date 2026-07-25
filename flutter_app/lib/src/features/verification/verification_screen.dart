@@ -315,7 +315,7 @@ class _VerificationScreenState extends ConsumerState<VerificationScreen> {
                     uploading: _uploading[_Step.cccdFront]!,
                     previewBytes: _stepPreviews[_Step.cccdFront],
                     extractedInfo: status['cccdVerified'] == true
-                        ? '${status['fullName']}  •  ${status['cccdNumber']}'
+                        ? 'CCCD đã xác thực'
                         : null,
                     onTap: () => _showSourcePicker(_Step.cccdFront),
                   ),
@@ -338,7 +338,7 @@ class _VerificationScreenState extends ConsumerState<VerificationScreen> {
                     uploading: _uploading[_Step.licenseFront]!,
                     previewBytes: _stepPreviews[_Step.licenseFront],
                     extractedInfo: status['licenseVerified'] == true
-                        ? 'Hạng ${status['licenseClass'] ?? '?'}'
+                        ? 'GPLX đã xác thực'
                         : null,
                     onTap: () => _showSourcePicker(_Step.licenseFront),
                   ),

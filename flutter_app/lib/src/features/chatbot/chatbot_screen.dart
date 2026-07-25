@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/network/dio_provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/toast_utils.dart';
+import '../cars/car_list_screen.dart';
 
 class ChatbotScreen extends ConsumerStatefulWidget {
   const ChatbotScreen({super.key});
@@ -20,12 +21,22 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
   final List<_ChatMessage> _messages = [];
   bool _isLoading = false;
 
+  static const _quickPrompts = [
+    'Xe 7 chỗ giá rẻ',
+    'VinFast điện',
+    'Toyota tầm trung',
+    'Chi nhánh Hoàn Kiếm',
+    'Dưới 1 triệu/ngày',
+  ];
+
   @override
   void initState() {
     super.initState();
     _messages.add(_ChatMessage(
-      text: 'Xin chào! 👋 Tôi là trợ lý GoRento.\n\nBạn muốn tìm xe gì? Ví dụ:\n• "Xe 7 chỗ giá rẻ"\n• "Toyota tầm trung"\n• "Xe điện VinFast"',
+      text: 'Xin chào! Mình là trợ lý GoRento.\n'
+          'Hỏi mình theo hãng, số chỗ, giá hoặc chi nhánh — ví dụ bên dưới.',
       isBot: true,
+      suggestions: _quickPrompts,
     ));
   }
 
@@ -37,41 +48,48 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
   }
 
   void _scrollToBottom() {
-    Future.delayed(const Duration(milliseconds: 100), () {
+    Future.delayed(const Duration(milliseconds: 120), () {
       if (_scrollController.hasClients) {
         _scrollController.animateTo(
           _scrollController.position.maxScrollExtent,
-          duration: const Duration(milliseconds: 300),
+          duration: const Duration(milliseconds: 280),
           curve: Curves.easeOut,
         );
       }
     });
   }
 
-  Future<void> _sendMessage() async {
-    final text = _controller.text.trim();
+  Future<void> _sendMessage([String? preset]) async {
+    final text = (preset ?? _controller.text).trim();
     if (text.isEmpty || _isLoading) return;
 
     setState(() {
       _messages.add(_ChatMessage(text: text, isBot: false));
       _isLoading = true;
     });
-    _controller.clear();
+    if (preset == null) _controller.clear();
     _scrollToBottom();
 
     try {
       final dio = ref.read(dioProvider);
       final response = await dio.post('/api/chatbot/ask', data: {'question': text});
-      final data = response.data['data'];
+      final data = response.data['data'] as Map<String, dynamic>? ?? {};
 
-      final answer = data['answer'] as String? ?? 'Xin lỗi, tôi không hiểu câu hỏi.';
+      final answer = data['answer'] as String? ?? 'Xin lỗi, mình chưa hiểu câu hỏi.';
       final cars = (data['cars'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+      final suggestions = (data['suggestions'] as List?)
+              ?.map((e) => e.toString())
+              .where((e) => e.isNotEmpty)
+              .toList() ??
+          const <String>[];
 
       setState(() {
         _messages.add(_ChatMessage(
           text: answer,
           isBot: true,
           cars: cars,
+          suggestions: suggestions.isEmpty ? null : suggestions,
+          relaxed: data['relaxed'] == true,
         ));
         _isLoading = false;
       });
@@ -83,6 +101,7 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
         _messages.add(_ChatMessage(
           text: msg,
           isBot: true,
+          suggestions: _quickPrompts,
         ));
         _isLoading = false;
       });
@@ -113,7 +132,7 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text('GoRento AI', style: tt.titleMedium),
-                Text('Trợ lý tìm xe thông minh', style: tt.bodySmall),
+                Text('Tìm xe theo ý bạn', style: tt.bodySmall),
               ],
             ),
           ],
@@ -121,7 +140,6 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
       ),
       body: Column(
         children: [
-          // Chat messages
           Expanded(
             child: ListView.builder(
               controller: _scrollController,
@@ -135,7 +153,6 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
               },
             ),
           ),
-          // Input bar
           Container(
             decoration: BoxDecoration(
               color: cs.surfaceContainerLowest,
@@ -162,7 +179,7 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
                         onSubmitted: (_) => _sendMessage(),
                         textInputAction: TextInputAction.send,
                         decoration: InputDecoration(
-                          hintText: 'Hỏi về xe bạn muốn thuê...',
+                          hintText: 'VD: xe 7 chỗ dưới 1 triệu…',
                           filled: true,
                           fillColor: cs.surfaceContainerHigh,
                           border: OutlineInputBorder(
@@ -175,10 +192,10 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
                     ),
                     const SizedBox(width: 10),
                     Material(
-                      color: cs.primary,
+                      color: _isLoading ? cs.outlineVariant : cs.primary,
                       borderRadius: BorderRadius.circular(AppTheme.radiusPill),
                       child: InkWell(
-                        onTap: _isLoading ? null : _sendMessage,
+                        onTap: _isLoading ? null : () => _sendMessage(),
                         borderRadius: BorderRadius.circular(AppTheme.radiusPill),
                         child: Container(
                           width: 48,
@@ -237,28 +254,66 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
                       bottomRight: Radius.circular(isBot ? 18 : 4),
                     ),
                   ),
-                  child: Text(
-                    message.text,
-                    style: tt.bodyMedium?.copyWith(
-                      color: isBot ? cs.onSurface : cs.onPrimary,
-                      height: 1.5,
-                    ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (message.relaxed == true) ...[
+                        Container(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: cs.secondaryContainer.withValues(alpha: 0.5),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            'Đã nới tiêu chí để gần đúng hơn',
+                            style: tt.labelSmall?.copyWith(
+                              color: cs.onSecondaryContainer,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                      Text(
+                        message.text,
+                        style: tt.bodyMedium?.copyWith(
+                          color: isBot ? cs.onSurface : cs.onPrimary,
+                          height: 1.45,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                // Car suggestion cards
                 if (isBot && message.cars != null && message.cars!.isNotEmpty) ...[
                   const SizedBox(height: 10),
                   SizedBox(
-                    height: 120,
+                    height: 138,
                     child: ListView.separated(
                       scrollDirection: Axis.horizontal,
-                      itemCount: message.cars!.length > 5 ? 5 : message.cars!.length,
-                      separatorBuilder: (context, index) => const SizedBox(width: 10),
+                      itemCount: message.cars!.length > 6 ? 6 : message.cars!.length,
+                      separatorBuilder: (_, _) => const SizedBox(width: 10),
                       itemBuilder: (context, index) {
-                        final car = message.cars![index];
-                        return _buildCarCard(car, cs, tt);
+                        return _buildCarCard(message.cars![index], cs, tt);
                       },
                     ),
+                  ),
+                ],
+                if (isBot && message.suggestions != null && message.suggestions!.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: message.suggestions!
+                        .take(4)
+                        .map(
+                          (s) => ActionChip(
+                            label: Text(s),
+                            onPressed: _isLoading ? null : () => _sendMessage(s),
+                            visualDensity: VisualDensity.compact,
+                            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
+                        )
+                        .toList(),
                   ),
                 ],
               ],
@@ -271,109 +326,105 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
 
   Widget _buildCarCard(Map<String, dynamic> car, ColorScheme cs, TextTheme tt) {
     final carId = car['id'] ?? car['carId'];
-    final name = car['name'] ?? 'Xe';
+    final title = carDisplayTitle(car['brand']?.toString(), car['name']?.toString());
     final price = car['pricePerDay'];
     final seats = car['seats'] ?? 5;
-    final location = car['location'] ?? '';
-    final imageUrl = car['imageUrl'];
+    final branch = (car['branchName'] ?? car['location'] ?? '').toString();
+    final imageUrl = car['imageUrl']?.toString();
 
-    return GestureDetector(
-      onTap: () {
-        if (carId != null) context.push('/cars/$carId');
-      },
-      child: Container(
-        width: 200,
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: cs.surfaceContainerLowest,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.3)),
-          boxShadow: [AppTheme.softShadow],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Row(
-              children: [
-                if (imageUrl != null) ...[
+    return Material(
+      color: cs.surfaceContainerLowest,
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        onTap: () {
+          if (carId != null) context.push('/cars/$carId');
+        },
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
+          width: 210,
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.35)),
+            boxShadow: [AppTheme.softShadow],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
                   ClipRRect(
                     borderRadius: BorderRadius.circular(8),
-                    child: Image.network(
-                      imageUrl,
-                      width: 44,
-                      height: 44,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) => Container(
-                        width: 44, height: 44,
-                        decoration: BoxDecoration(
-                          color: cs.surfaceContainerHigh,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Icon(Icons.directions_car, color: cs.outline, size: 20),
-                      ),
-                    ),
+                    child: imageUrl != null && imageUrl.isNotEmpty
+                        ? Image.network(
+                            imageUrl,
+                            width: 48,
+                            height: 48,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, _, _) => _carPlaceholder(cs),
+                          )
+                        : _carPlaceholder(cs),
                   ),
                   const SizedBox(width: 10),
-                ] else ...[
-                  Container(
-                    width: 44, height: 44,
-                    decoration: BoxDecoration(
-                      color: cs.surfaceContainerHigh,
-                      borderRadius: BorderRadius.circular(8),
+                  Expanded(
+                    child: Text(
+                      title.isEmpty ? 'Xe' : title,
+                      style: tt.titleSmall?.copyWith(fontSize: 13, fontWeight: FontWeight.w700),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                    child: Icon(Icons.directions_car, color: cs.outline, size: 20),
                   ),
-                  const SizedBox(width: 10),
                 ],
-                Expanded(
-                  child: Text(
-                    name,
-                    style: tt.titleSmall?.copyWith(fontSize: 13),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 6),
-            Row(
-              children: [
-                Icon(Icons.event_seat_rounded, size: 14, color: cs.outline),
-                const SizedBox(width: 4),
-                Text('$seats chỗ', style: tt.bodySmall),
-                const Spacer(),
-                Text(
-                  price != null
-                      ? '${_formatPrice(price)} đ'
-                      : '',
-                  style: tt.labelMedium?.copyWith(
-                    color: cs.secondary,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ],
-            ),
-            if (location.isNotEmpty) ...[
-              const SizedBox(height: 2),
-              Text(
-                location,
-                style: tt.bodySmall?.copyWith(fontSize: 11),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
               ),
+              const Spacer(),
+              Row(
+                children: [
+                  Icon(Icons.event_seat_rounded, size: 14, color: cs.outline),
+                  const SizedBox(width: 4),
+                  Text('$seats chỗ', style: tt.bodySmall),
+                  const Spacer(),
+                  Text(
+                    price != null ? '${_formatPrice(price)} đ/ngày' : '',
+                    style: tt.labelMedium?.copyWith(
+                      color: cs.primary,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ],
+              ),
+              if (branch.isNotEmpty) ...[
+                const SizedBox(height: 4),
+                Text(
+                  branch,
+                  style: tt.bodySmall?.copyWith(fontSize: 11, color: cs.onSurfaceVariant),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );
   }
 
+  Widget _carPlaceholder(ColorScheme cs) {
+    return Container(
+      width: 48,
+      height: 48,
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerHigh,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Icon(Icons.directions_car, color: cs.outline, size: 22),
+    );
+  }
+
   String _formatPrice(dynamic price) {
-    final num = double.tryParse(price.toString()) ?? 0;
-    if (num >= 1000000) return '${(num / 1000000).toStringAsFixed(1)}M';
-    if (num >= 1000) return '${(num / 1000).toStringAsFixed(0)}K';
-    return num.toStringAsFixed(0);
+    final n = double.tryParse(price.toString()) ?? 0;
+    if (n >= 1000000) return '${(n / 1000000).toStringAsFixed(1)}M';
+    if (n >= 1000) return '${(n / 1000).toStringAsFixed(0)}K';
+    return n.toStringAsFixed(0);
   }
 
   Widget _buildTypingIndicator(ColorScheme cs) {
@@ -423,8 +474,16 @@ class _ChatMessage {
   final String text;
   final bool isBot;
   final List<Map<String, dynamic>>? cars;
+  final List<String>? suggestions;
+  final bool? relaxed;
 
-  _ChatMessage({required this.text, required this.isBot, this.cars});
+  _ChatMessage({
+    required this.text,
+    required this.isBot,
+    this.cars,
+    this.suggestions,
+    this.relaxed,
+  });
 }
 
 class _BounceDot extends StatefulWidget {

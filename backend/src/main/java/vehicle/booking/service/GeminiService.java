@@ -12,9 +12,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * GeminiService — gọi Gemini API (gemini-2.0-flash) để:
- * 1. Parse câu hỏi tự nhiên → structured filter
- * 2. Trau chuốt câu trả lời tiếng Việt
+ * GeminiService — parse câu hỏi → filter JSON + viết câu trả lời ngắn gọn.
  */
 @Slf4j
 @Service
@@ -38,9 +36,6 @@ public class GeminiService {
         return apiKey != null && !apiKey.isBlank();
     }
 
-    /**
-     * Gửi prompt tới Gemini và trả về text response.
-     */
     public String generateContent(String systemInstruction, String userMessage) {
         if (!isAvailable()) {
             log.warn("Gemini API key chưa được cấu hình");
@@ -51,18 +46,20 @@ public class GeminiService {
             String url = GEMINI_API_URL + "?key=" + apiKey;
 
             Map<String, Object> body = Map.of(
-                "system_instruction", Map.of(
-                    "parts", List.of(Map.of("text", systemInstruction))
-                ),
-                "contents", List.of(
-                    Map.of("parts", List.of(Map.of("text", userMessage)))
-                ),
-                "generationConfig", Map.of(
-                    "temperature", 0.3,
-                    "maxOutputTokens", 1024
-                )
+                    "system_instruction", Map.of(
+                            "parts", List.of(Map.of("text", systemInstruction))
+                    ),
+                    "contents", List.of(
+                            Map.of("parts", List.of(Map.of("text", userMessage)))
+                    ),
+                    "generationConfig", Map.of(
+                            "temperature", 0.2,
+                            "maxOutputTokens", 700,
+                            "responseMimeType", "application/json"
+                    )
             );
 
+            // formatResponse cần text tự do — dùng overload không ép JSON
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
             HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
@@ -82,62 +79,76 @@ public class GeminiService {
         return null;
     }
 
-    /**
-     * Parse câu hỏi tự nhiên của khách thành structured JSON filter.
-     * Gemini sẽ hiểu các câu viết tắt, typo, slang.
-     */
+    private String generatePlainText(String systemInstruction, String userMessage) {
+        if (!isAvailable()) return null;
+        try {
+            String url = GEMINI_API_URL + "?key=" + apiKey;
+            Map<String, Object> body = Map.of(
+                    "system_instruction", Map.of(
+                            "parts", List.of(Map.of("text", systemInstruction))
+                    ),
+                    "contents", List.of(
+                            Map.of("parts", List.of(Map.of("text", userMessage)))
+                    ),
+                    "generationConfig", Map.of(
+                            "temperature", 0.35,
+                            "maxOutputTokens", 450
+                    )
+            );
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
+            ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.POST, request, String.class);
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                JsonNode root = objectMapper.readTree(response.getBody());
+                JsonNode candidates = root.path("candidates");
+                if (candidates.isArray() && !candidates.isEmpty()) {
+                    return candidates.get(0).path("content").path("parts").get(0).path("text").asText();
+                }
+            }
+        } catch (Exception e) {
+            log.error("Lỗi gọi Gemini API (plain): {}", e.getMessage(), e);
+        }
+        return null;
+    }
+
     public String parseUserQueryToFilters(String userQuestion) {
         String systemPrompt = """
-            Bạn là AI assistant cho hệ thống thuê xe GoRento.
-            Nhiệm vụ: Parse câu hỏi của khách hàng thành JSON filter để tìm xe phù hợp.
-            
-            Các trường filter có thể dùng:
-            - brand: hãng xe (VinFast, Toyota, Honda, Mazda, Hyundai, KIA, BMW, Mercedes-Benz, Audi, Ford, Mitsubishi, Suzuki)
-            - minPrice, maxPrice: khoảng giá (đơn vị VND/ngày)
-            - seats: số chỗ ngồi (4, 5, 7, 8, 9)
-            - fuelType: GASOLINE, DIESEL, ELECTRIC, HYBRID
-            - transmission: AUTOMATIC, MANUAL
-            - location: khu vực
-            - name: tên xe cụ thể
-            
-            Quy tắc:
-            - "giá rẻ" → maxPrice: 800000
-            - "giá tầm trung" → minPrice: 800000, maxPrice: 1500000
-            - "cao cấp" / "sang" → minPrice: 2000000
-            - "7 chỗ" → seats: 7
-            - "xe điện" → fuelType: ELECTRIC
-            - "số tự động" / "AT" → transmission: AUTOMATIC
-            - "số sàn" / "MT" → transmission: MANUAL
-            
-            CHỈ trả về JSON object, KHÔNG giải thích thêm.
-            Nếu không parse được, trả về: {}
+            Bạn là bộ parse filter cho GoRento (thuê xe tự lái tại 3 chi nhánh Hà Nội:
+            GoRento Hoàn Kiếm, GoRento Cầu Giấy, GoRento Thanh Xuân).
+
+            Trả về ĐÚNG 1 JSON object (không markdown) với các key tùy chọn:
+            brand, name, minPrice, maxPrice, seats, fuelType, transmission, location, branchId
+
+            Quy ước:
+            - brand: VinFast|Toyota|Honda|Mazda|Hyundai|KIA|BMW|Mercedes-Benz|Audi|Ford|Mitsubishi|Suzuki
+            - seats: số nguyên hoặc mảng số (vd 7 hoặc [7])
+            - fuelType: GASOLINE|DIESEL|ELECTRIC|HYBRID
+            - transmission: AUTOMATIC|MANUAL
+            - Giá VND/ngày. "giá rẻ"/dưới 1tr → maxPrice 900000; tầm trung → 800000–1600000; cao cấp → minPrice 2000000
+            - "Hoàn Kiếm|Tràng Tiền" → location "Hoàn Kiếm"; "Cầu Giấy|Duy Tân|Mỹ Đình" → "Cầu Giấy"; "Thanh Xuân|Nguyễn Trãi" → "Thanh Xuân"
+            - Typo/slang tiếng Việt vẫn parse được (vd mec, vf8, 7cho)
+            - Chỉ điền field chắc chắn suy ra được. Không bịa.
+            - Không hiểu → {}
             """;
 
         return generateContent(systemPrompt, userQuestion);
     }
 
-    /**
-     * Trau chuốt câu trả lời dựa trên kết quả tìm xe.
-     */
     public String formatResponse(String userQuestion, String carsJson, int totalFound) {
         String systemPrompt = """
-            Bạn là trợ lý ảo thân thiện của GoRento — hệ thống thuê xe tự lái.
-            Trả lời bằng tiếng Việt, ngắn gọn, thân thiện. Dùng emoji phù hợp.
-            
-            Quy tắc:
-            - Nếu tìm thấy xe: tóm tắt các xe phù hợp nhất (tên, giá, đặc điểm nổi bật)
-            - Nếu không tìm thấy: gợi ý thử lại với tiêu chí khác
-            - Luôn khuyến khích khách đặt xe
-            - Giá hiển thị dạng "XXX.XXX đ/ngày"
-            - KHÔNG bịa thông tin xe không có trong dữ liệu
-            - Giới hạn 200 từ
+            Bạn là trợ lý GoRento. Trả lời tiếng Việt, ngắn (tối đa 80 từ), thân thiện, không markdown đậm.
+            - Chỉ dùng xe trong dữ liệu JSON.
+            - Nêu 1–3 xe: tên đầy đủ (hãng + tên), giá đ/ngày, chi nhánh nếu có.
+            - Kết thúc bằng lời mời chạm thẻ xe bên dưới để đặt.
+            - Không bịa thông tin. Không liệt kê quá 3 xe trong text.
             """;
 
         String userMsg = String.format(
-            "Câu hỏi khách: \"%s\"\nTìm thấy %d xe.\nDữ liệu xe:\n%s",
-            userQuestion, totalFound, carsJson
+                "Câu hỏi: \"%s\"\nSố xe tìm thấy: %d\nJSON xe:\n%s",
+                userQuestion, totalFound, carsJson
         );
 
-        return generateContent(systemPrompt, userMsg);
+        return generatePlainText(systemPrompt, userMsg);
     }
 }
