@@ -12,21 +12,66 @@ def get_reader():
 
 
 def ocr_image(image_np: np.ndarray) -> dict:
+    """OCR CCCD / GPLX. Chỉ trả code 200 khi đọc được trường bắt buộc.
+
+    Trước đây soft-pass luôn 200 → upload ảnh bất kỳ cũng pass.
+    Giờ: CCCD cần số 12 số; GPLX cần hạng bằng (hoặc số + tên).
+    """
     reader = get_reader()
     raw = reader.readtext(image_np, detail=0, paragraph=True)
     text = '\n'.join(raw)
+
+    if not text or len(text.strip()) < 8:
+        return {
+            'code': 422,
+            'data': {},
+            'raw_text': text or '',
+            'message': 'Không đọc được chữ trên ảnh — chụp rõ, đủ sáng, không bị cắt',
+        }
 
     doc_type = _detect_type(text)
     fields = _parse_license(text) if doc_type == 'license' else _parse_cccd(text)
     fields['doc_type'] = doc_type
 
-    success = True  # soft-pass: luôn trả 200 để demo dễ hoàn tất
+    ok, reason = _is_valid_document(doc_type, fields, text)
+    if not ok:
+        return {
+            'code': 422,
+            'data': fields,
+            'raw_text': text,
+            'message': reason,
+        }
+
     return {
         'code': 200,
         'data': fields,
         'raw_text': text,
-        'message': 'ok' if (fields.get('id') or fields.get('name')) else 'partial',
+        'message': 'ok',
     }
+
+
+def _is_valid_document(doc_type: str, fields: dict, text: str) -> tuple[bool, str]:
+    """Trả (ok, message). Ảnh random / không phải giấy tờ sẽ fail tại đây."""
+    has_id = bool(fields.get('id')) and str(fields.get('id')).isdigit() and len(str(fields['id'])) == 12
+    has_name = bool(fields.get('name')) and len(str(fields['name']).strip()) >= 3
+    has_class = bool(fields.get('type'))
+
+    if doc_type == 'license':
+        if has_class and (has_id or has_name):
+            return True, 'ok'
+        if has_id and has_name:
+            return True, 'ok'
+        return False, 'Không nhận ra bằng lái — cần thấy hạng (A1/B1/B2…) hoặc số GPLX + họ tên'
+
+    # CCCD / mặc định
+    if has_id:
+        return True, 'ok'
+    # Mặt sau CCCD đôi khi không có đủ 12 số rõ — chấp nhận nếu có từ khoá CCCD + ngày/địa chỉ
+    upper = text.upper()
+    looks_cccd = any(kw in upper for kw in _CCCD_KW)
+    if looks_cccd and (fields.get('expiry') or fields.get('home') or fields.get('issue_date') or has_name):
+        return True, 'ok'
+    return False, 'Không nhận ra CCCD — cần thấy số CCCD 12 số rõ trên ảnh'
 
 
 # ── Document type detection ───────────────────────────────────────────────────

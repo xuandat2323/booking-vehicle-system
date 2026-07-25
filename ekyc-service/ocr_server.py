@@ -38,6 +38,7 @@ async def ocr_endpoint(file: UploadFile = File(...)):
 
 @app.post("/spoof-check")
 async def spoof_check_endpoint(file: UploadFile = File(...)):
+    """Spoof soft-pass trên OCR-only server (không chặn vì blur)."""
     await file.read()
     return JSONResponse(content={
         "code": 200,
@@ -48,11 +49,19 @@ async def spoof_check_endpoint(file: UploadFile = File(...)):
 
 @app.post("/liveness")
 async def liveness_endpoint(file: UploadFile = File(...)):
-    await file.read()
+    """OCR-only: chỉ kiểm tra có khuôn mặt trong ảnh (OpenCV), không soft-pass ảnh trống."""
+    data = await file.read()
+    img = _read_image(data)
+    faces = _detect_faces(img)
+    ok = len(faces) >= 1
     return JSONResponse(content={
         "code": 200,
-        "data": {"is_live": True, "liveness_score": 0.85},
-        "message": "liveness soft-pass (ocr-only server)",
+        "data": {
+            "is_live": ok,
+            "liveness_score": 0.75 if ok else 0.1,
+            "face_count": len(faces),
+        },
+        "message": "ok" if ok else "Không thấy khuôn mặt trong selfie",
     })
 
 
@@ -61,13 +70,37 @@ async def face_match_endpoint(
     face: UploadFile = File(...),
     id_image: UploadFile = File(...),
 ):
-    await face.read()
-    await id_image.read()
+    """OCR-only: bắt buộc cả selfie và ảnh giấy tờ có khuôn mặt (OpenCV).
+
+    Không phải DeepFace — chỉ chặn ảnh không có mặt. So khớp thật: chạy main.py.
+    """
+    face_bytes = await face.read()
+    id_bytes = await id_image.read()
+    face_np = _read_image(face_bytes)
+    id_np = _read_image(id_bytes)
+    face_n = len(_detect_faces(face_np))
+    id_n = len(_detect_faces(id_np))
+    if face_n < 1 or id_n < 1:
+        return JSONResponse(content={
+            "code": 200,
+            "data": {"similarity": 0.0, "score": 0.0, "verified": False},
+            "message": "Không thấy khuôn mặt trên selfie hoặc ảnh giấy tờ",
+        })
+    # Có mặt ở cả 2 ảnh → cho qua ngưỡng (0.65). Muốn so khớp danh tính thật dùng main.py.
     return JSONResponse(content={
         "code": 200,
-        "data": {"similarity": 0.82, "score": 0.82},
-        "message": "face soft-pass (ocr-only server — enable full ekyc for real match)",
+        "data": {"similarity": 0.72, "score": 0.72, "verified": True},
+        "message": "face detect ok (ocr-only — chưa so DeepFace)",
     })
+
+
+def _detect_faces(img: np.ndarray) -> list:
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    cascade = cv2.CascadeClassifier(
+        cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
+    )
+    faces = cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=4, minSize=(60, 60))
+    return list(faces)
 
 
 if __name__ == "__main__":

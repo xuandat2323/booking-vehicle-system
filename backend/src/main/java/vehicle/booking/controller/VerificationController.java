@@ -26,6 +26,11 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class VerificationController {
 
+    /** Face cosine similarity tối thiểu để coi là khớp (0..1). */
+    private static final float FACE_MATCH_THRESHOLD = 0.65f;
+    /** Liveness score tối thiểu. */
+    private static final float LIVENESS_THRESHOLD = 0.55f;
+
     private final UserRepository userRepository;
     private final UserVerificationRepository verificationRepository;
     private final EkycService ekycService;
@@ -76,38 +81,58 @@ public class VerificationController {
         User user = getUser(userDetails);
         requireImage(image);
 
+        // Spoof vẫn soft: chỉ log, không chặn vì ảnh mờ (đòi hỏi trước đây của khách).
         Map<String, Object> spoofResult = ekycService.spoofCheck(image);
-        // Soft-pass spoof: ảnh mờ / chất lượng thấp vẫn cho qua (demo / dễ pass)
-        boolean isSpoofed = false;
+        boolean isSpoofed = extractSpoofed(spoofResult);
 
         Map<String, Object> ocrResult = ekycService.ocrIdCard(image);
-        boolean ocrOk = Integer.valueOf(200).equals(ocrResult.get("code"));
+        boolean ocrOk = isOcrOk(ocrResult);
+        String ocrMsg = messageOf(ocrResult, "Không nhận dạng được CCCD — vui lòng chụp lại rõ hơn");
 
         UserVerification v = verificationRepository.findByUserUserId(user.getUserId())
                 .orElseGet(() -> { UserVerification nv = new UserVerification(); nv.setUser(user); return nv; });
 
-        v.setCccdSpoofed(false);
+        v.setCccdSpoofed(isSpoofed);
 
-        // Soft-pass OCR: upload ảnh là pass; vẫn lưu OCR nếu đọc được
-        boolean verified = true;
+        String id = null;
+        String name = null;
+        String docType = null;
         if (ocrOk && ocrResult.get("data") instanceof Map<?,?> d) {
-            v.setCccdNumber(str(d, "id"));
-            v.setFullName(str(d, "name"));
+            id = str(d, "id");
+            name = str(d, "name");
+            docType = str(d, "doc_type");
+            v.setCccdNumber(id);
+            v.setFullName(name);
             v.setBirthDay(str(d, "birth_day"));
             v.setAddress(str(d, "home"));
             v.setIssueDate(str(d, "issue_date"));
             v.setExpiry(str(d, "expiry"));
+        }
+
+        // Mặt trước CCCD: bắt buộc đọc được số 12 số, và không phải ảnh GPLX.
+        boolean looksLikeLicense = "license".equalsIgnoreCase(docType);
+        boolean verified = ocrOk && !looksLikeLicense && isCccdNumber(id);
+        if (looksLikeLicense) {
+            ocrMsg = "Ảnh giống bằng lái xe — vui lòng upload mặt trước CCCD";
+        } else if (ocrOk && !isCccdNumber(id)) {
+            ocrMsg = "Không đọc được số CCCD 12 số — chụp rõ phần số căn cước";
         }
         v.setCccdVerified(verified);
 
         updateOverallStatus(v);
         verificationRepository.save(v);
 
-        return ResponseEntity.ok(new ApiResponse<>(true,
-                "Xác minh CCCD thành công",
-                Map.of("ocrSuccess", true, "isSpoofed", isSpoofed,
-                       "name", v.getFullName() != null ? v.getFullName() : "",
-                       "id", v.getCccdNumber() != null ? v.getCccdNumber() : "")));
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("ocrSuccess", verified);
+        payload.put("isSpoofed", isSpoofed);
+        payload.put("name", name != null ? name : "");
+        payload.put("id", id != null ? id : "");
+        payload.put("message", verified ? "Xác minh CCCD thành công" : ocrMsg);
+
+        return ResponseEntity.ok(new ApiResponse<>(
+                verified,
+                verified ? "Xác minh CCCD thành công" : ocrMsg,
+                payload));
     }
 
     @PostMapping("/cccd/back")
@@ -118,21 +143,30 @@ public class VerificationController {
         requireImage(image);
 
         Map<String, Object> spoofResult = ekycService.spoofCheck(image);
-        boolean isSpoofed = false;
+        boolean isSpoofed = extractSpoofed(spoofResult);
 
         Map<String, Object> ocrResult = ekycService.ocrIdCard(image);
-        boolean ocrOk = Integer.valueOf(200).equals(ocrResult.get("code"));
+        boolean ocrOk = isOcrOk(ocrResult);
+        String ocrMsg = messageOf(ocrResult, "Không nhận dạng được mặt sau CCCD");
+
         String backNumber = null;
+        String docType = null;
         if (ocrOk && ocrResult.get("data") instanceof Map<?,?> d) {
             backNumber = str(d, "id");
             if (backNumber == null) backNumber = str(d, "barcode");
+            docType = str(d, "doc_type");
         }
 
         UserVerification v = verificationRepository.findByUserUserId(user.getUserId())
                 .orElseGet(() -> { UserVerification nv = new UserVerification(); nv.setUser(user); return nv; });
 
-        boolean verified = true;
-        v.setCccdBackSpoofed(false);
+        // Mặt sau: OCR phải đọc được giấy tờ (code 200), không chấp nhận ảnh trống/random.
+        boolean verified = ocrOk && !"license".equalsIgnoreCase(docType);
+        if ("license".equalsIgnoreCase(docType)) {
+            ocrMsg = "Ảnh giống bằng lái — vui lòng upload mặt sau CCCD";
+            verified = false;
+        }
+        v.setCccdBackSpoofed(isSpoofed);
         v.setCccdBackVerified(verified);
         if (backNumber != null) {
             v.setCccdBackNumber(backNumber);
@@ -141,12 +175,17 @@ public class VerificationController {
         updateOverallStatus(v);
         verificationRepository.save(v);
 
-        return ResponseEntity.ok(new ApiResponse<>(true,
-                "Xác minh mặt sau CCCD thành công",
-                Map.of("ocrSuccess", true,
-                       "isSpoofed", isSpoofed,
-                       "cccdBackVerified", verified,
-                       "cccdBackNumber", backNumber != null ? backNumber : "")));
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("ocrSuccess", verified);
+        payload.put("isSpoofed", isSpoofed);
+        payload.put("cccdBackVerified", verified);
+        payload.put("cccdBackNumber", backNumber != null ? backNumber : "");
+        payload.put("message", verified ? "Xác minh mặt sau CCCD thành công" : ocrMsg);
+
+        return ResponseEntity.ok(new ApiResponse<>(
+                verified,
+                verified ? "Xác minh mặt sau CCCD thành công" : ocrMsg,
+                payload));
     }
 
     @PostMapping("/license")
@@ -157,33 +196,58 @@ public class VerificationController {
         requireImage(image);
 
         Map<String, Object> spoofResult = ekycService.spoofCheck(image);
-        boolean isSpoofed = false;
+        boolean isSpoofed = extractSpoofed(spoofResult);
 
         Map<String, Object> ocrResult = ekycService.ocrIdCard(image);
-        boolean ocrOk = Integer.valueOf(200).equals(ocrResult.get("code"));
+        boolean ocrOk = isOcrOk(ocrResult);
+        String ocrMsg = messageOf(ocrResult, "Không nhận dạng được bằng lái — vui lòng chụp lại rõ hơn");
 
         UserVerification v = verificationRepository.findByUserUserId(user.getUserId())
                 .orElseGet(() -> { UserVerification nv = new UserVerification(); nv.setUser(user); return nv; });
 
-        v.setLicenseSpoofed(false);
+        v.setLicenseSpoofed(isSpoofed);
 
-        boolean verified = true;
+        String licId = null;
+        String licName = null;
+        String licClass = null;
+        String docType = null;
         if (ocrOk && ocrResult.get("data") instanceof Map<?,?> d) {
-            v.setLicenseNumber(str(d, "id"));
-            v.setLicenseName(str(d, "name"));
+            licId = str(d, "id");
+            licName = str(d, "name");
+            licClass = str(d, "type");
+            docType = str(d, "doc_type");
+            v.setLicenseNumber(licId);
+            v.setLicenseName(licName);
             v.setLicenseExpiry(str(d, "expiry"));
-            v.setLicenseClass(str(d, "type"));
+            v.setLicenseClass(licClass);
+        }
+
+        boolean looksLikeCccd = "cccd".equalsIgnoreCase(docType) && (licClass == null || licClass.isBlank());
+        boolean hasClass = licClass != null && !licClass.isBlank();
+        boolean hasIdOrName = isCccdNumber(licId) || (licName != null && licName.length() >= 3);
+        boolean verified = ocrOk && !looksLikeCccd && (hasClass || hasIdOrName);
+        if (looksLikeCccd) {
+            ocrMsg = "Ảnh giống CCCD — vui lòng upload mặt trước bằng lái xe";
+            verified = false;
+        } else if (ocrOk && !verified) {
+            ocrMsg = "Không đọc được hạng bằng / số GPLX — chụp rõ phần hạng (A1, B1, B2…)";
         }
         v.setLicenseVerified(verified);
 
         updateOverallStatus(v);
         verificationRepository.save(v);
 
-        return ResponseEntity.ok(new ApiResponse<>(true,
-                "Xác minh bằng lái thành công",
-                Map.of("ocrSuccess", true, "isSpoofed", isSpoofed,
-                       "licenseNumber", v.getLicenseNumber() != null ? v.getLicenseNumber() : "",
-                       "licenseClass", v.getLicenseClass() != null ? v.getLicenseClass() : "")));
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("ocrSuccess", verified);
+        payload.put("isSpoofed", isSpoofed);
+        payload.put("licenseNumber", licId != null ? licId : "");
+        payload.put("licenseClass", licClass != null ? licClass : "");
+        payload.put("message", verified ? "Xác minh bằng lái thành công" : ocrMsg);
+
+        return ResponseEntity.ok(new ApiResponse<>(
+                verified,
+                verified ? "Xác minh bằng lái thành công" : ocrMsg,
+                payload));
     }
 
     @PostMapping("/license/back")
@@ -194,22 +258,33 @@ public class VerificationController {
         requireImage(image);
 
         Map<String, Object> spoofResult = ekycService.spoofCheck(image);
-        boolean isSpoofed = false;
+        boolean isSpoofed = extractSpoofed(spoofResult);
+
+        // Mặt sau bằng: vẫn OCR để từ chối ảnh trống / không có chữ.
+        Map<String, Object> ocrResult = ekycService.ocrIdCard(image);
+        boolean ocrOk = isOcrOk(ocrResult);
+        String ocrMsg = messageOf(ocrResult, "Không nhận dạng được mặt sau bằng lái");
 
         UserVerification v = verificationRepository.findByUserUserId(user.getUserId())
                 .orElseGet(() -> { UserVerification nv = new UserVerification(); nv.setUser(user); return nv; });
 
-        boolean verified = true;
-        v.setLicenseBackSpoofed(false);
+        boolean verified = ocrOk;
+        v.setLicenseBackSpoofed(isSpoofed);
         v.setLicenseBackVerified(verified);
 
         updateOverallStatus(v);
         verificationRepository.save(v);
 
-        return ResponseEntity.ok(new ApiResponse<>(true,
-                "Xác minh mặt sau bằng lái thành công",
-                Map.of("isSpoofed", isSpoofed,
-                       "licenseBackVerified", verified)));
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("ocrSuccess", verified);
+        payload.put("isSpoofed", isSpoofed);
+        payload.put("licenseBackVerified", verified);
+        payload.put("message", verified ? "Xác minh mặt sau bằng lái thành công" : ocrMsg);
+
+        return ResponseEntity.ok(new ApiResponse<>(
+                verified,
+                verified ? "Xác minh mặt sau bằng lái thành công" : ocrMsg,
+                payload));
     }
 
     @PostMapping("/face")
@@ -232,37 +307,52 @@ public class VerificationController {
                 livenessScore = num.floatValue();
             }
         }
+        boolean livenessOk = isLive && livenessScore >= LIVENESS_THRESHOLD;
 
         Map<String, Object> faceMatchResult = ekycService.faceMatch(selfie, idImage);
         float faceMatchScore = 0f;
+        boolean providerVerified = false;
         if (faceMatchResult.get("data") instanceof Map<?,?> fd) {
             Object simVal = fd.get("similarity");
             if (simVal == null) simVal = fd.get("score");
             if (simVal instanceof Number num) {
                 faceMatchScore = num.floatValue();
             }
+            providerVerified = Boolean.TRUE.equals(fd.get("verified"));
         }
-
-        boolean faceMatchVerified = true; // soft-pass selfie cho demo
+        boolean faceMatchVerified = providerVerified || faceMatchScore >= FACE_MATCH_THRESHOLD;
+        // Cần sống + khớp — không soft-pass.
+        boolean verified = livenessOk && faceMatchVerified;
 
         UserVerification v = verificationRepository.findByUserUserId(user.getUserId())
                 .orElseGet(() -> { UserVerification nv = new UserVerification(); nv.setUser(user); return nv; });
 
-        v.setLivenessVerified(true);
-        v.setLivenessScore(Math.max(livenessScore, 0.9f));
-        v.setFaceMatchScore(Math.max(faceMatchScore, 0.9f));
-        v.setFaceMatchVerified(faceMatchVerified);
+        v.setLivenessVerified(livenessOk);
+        v.setLivenessScore(livenessScore);
+        v.setFaceMatchScore(faceMatchScore);
+        v.setFaceMatchVerified(verified);
 
         updateOverallStatus(v);
         verificationRepository.save(v);
 
-        return ResponseEntity.ok(new ApiResponse<>(true,
-                "Xác minh khuôn mặt thành công",
-                Map.of("ocrSuccess", true,
-                       "isLive", true,
-                       "livenessScore", v.getLivenessScore(),
-                       "faceMatchScore", v.getFaceMatchScore(),
-                       "faceMatchVerified", faceMatchVerified)));
+        String msg;
+        if (!livenessOk) {
+            msg = "Không phát hiện khuôn mặt sống — vui lòng chụp selfie rõ, nhìn thẳng camera";
+        } else if (!faceMatchVerified) {
+            msg = String.format("Khuôn mặt không khớp giấy tờ (%.0f%%) — thử lại với ảnh CCCD rõ mặt", faceMatchScore * 100);
+        } else {
+            msg = "Xác minh khuôn mặt thành công";
+        }
+
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("ocrSuccess", verified);
+        payload.put("isLive", livenessOk);
+        payload.put("livenessScore", livenessScore);
+        payload.put("faceMatchScore", faceMatchScore);
+        payload.put("faceMatchVerified", verified);
+        payload.put("message", msg);
+
+        return ResponseEntity.ok(new ApiResponse<>(verified, msg, payload));
     }
 
     private User getUser(UserDetails ud) {
@@ -274,6 +364,22 @@ public class VerificationController {
         if (image == null || image.isEmpty()) {
             throw new AppException(ErrorCode.COMMON_BAD_REQUEST);
         }
+    }
+
+    private boolean isOcrOk(Map<String, Object> ocrResult) {
+        return Integer.valueOf(200).equals(ocrResult.get("code"));
+    }
+
+    private String messageOf(Map<String, Object> result, String fallback) {
+        Object msg = result.get("message");
+        if (msg != null && !msg.toString().isBlank() && !"ok".equalsIgnoreCase(msg.toString())) {
+            return msg.toString();
+        }
+        return fallback;
+    }
+
+    private boolean isCccdNumber(String id) {
+        return id != null && id.matches("\\d{12}");
     }
 
     private boolean extractSpoofed(Map<String, Object> spoofResult) {

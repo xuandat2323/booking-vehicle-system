@@ -42,15 +42,17 @@ public class EkycService {
     }
 
     public Map<String, Object> spoofCheck(MultipartFile file) {
+        // Spoof phụ trợ: service down thì cho qua (tránh kẹt vì blur/service).
         return invoke("spoofCheck", () -> provider.spoofCheck(file), true);
     }
 
     public Map<String, Object> faceMatch(MultipartFile face, MultipartFile idCard) {
-        return invoke("faceMatch", () -> provider.faceMatch(face, idCard), true);
+        // Không soft-pass face — tránh upload gì cũng khớp.
+        return invoke("faceMatch", () -> provider.faceMatch(face, idCard), false);
     }
 
     public Map<String, Object> livenessCheck(MultipartFile face) {
-        return invoke("livenessCheck", () -> provider.livenessCheck(face), true);
+        return invoke("livenessCheck", () -> provider.livenessCheck(face), false);
     }
 
     private Map<String, Object> invoke(String op, Call call, boolean softPassOnFailure) {

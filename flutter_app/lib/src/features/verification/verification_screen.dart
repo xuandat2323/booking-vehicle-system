@@ -165,13 +165,19 @@ class _VerificationScreenState extends ConsumerState<VerificationScreen> {
         msg = 'Phát hiện giấy tờ giả mạo!';
         color = Colors.red;
       } else if (ocrOk) {
-        msg = '${step.label} xác minh thành công!';
+        msg = data['message']?.toString().isNotEmpty == true
+            ? data['message'].toString()
+            : '${step.label} xác minh thành công!';
         color = Colors.green;
       } else if (step == _Step.cccdBack || step == _Step.licenseBack) {
-        msg = '${step.label} hợp lệ!';
-        color = Colors.green;
+        msg = data['message']?.toString().isNotEmpty == true
+            ? data['message'].toString()
+            : 'Không nhận dạng được ${step.label.toLowerCase()} — chụp lại rõ hơn';
+        color = Colors.orange;
       } else {
-        msg = 'Không nhận dạng được ảnh — vui lòng chụp lại rõ hơn';
+        msg = data['message']?.toString().isNotEmpty == true
+            ? data['message'].toString()
+            : 'Không nhận dạng được ảnh — vui lòng chụp lại rõ hơn';
         color = Colors.orange;
       }
 
