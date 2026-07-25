@@ -86,7 +86,12 @@ final appRouterProvider = Provider<GoRouter>((ref) {
               builder: (c, s) => const AdminDashboardScreen(),
               routes: [
                 GoRoute(path: 'users', builder: (c, s) => const AdminUsersScreen()),
-                GoRoute(path: 'cars', builder: (c, s) => const AdminCarsScreen()),
+                GoRoute(
+                  path: 'cars',
+                  builder: (c, s) => AdminCarsScreen(
+                    initialStatus: s.uri.queryParameters['status'],
+                  ),
+                ),
                 GoRoute(path: 'bookings', builder: (c, s) => const AdminBookingsScreen()),
                 GoRoute(path: 'branches', builder: (c, s) => const AdminBranchesScreen()),
               ],

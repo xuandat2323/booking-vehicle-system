@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/network/dio_provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../verification/verification_provider.dart';
+import 'car_list_screen.dart';
 
 final carDetailProvider = FutureProvider.family<Map<String, dynamic>, String>((ref, carId) async {
   final dio = ref.read(dioProvider);
@@ -103,11 +104,16 @@ class CarDetailScreen extends ConsumerWidget {
                                       crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
                                         Text(
-                                          '${car['brand']} ${car['name']}',
+                                          carDisplayTitle(
+                                            car['brand']?.toString(),
+                                            car['name']?.toString(),
+                                          ),
                                           style: tt.headlineMedium?.copyWith(
                                             fontWeight: FontWeight.w800,
                                             letterSpacing: -0.5,
                                           ),
+                                          maxLines: 2,
+                                          overflow: TextOverflow.ellipsis,
                                         ),
                                         const SizedBox(height: 8),
                                         Row(

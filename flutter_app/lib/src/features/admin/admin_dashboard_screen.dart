@@ -111,7 +111,7 @@ class _DashboardBody extends StatelessWidget {
           crossAxisCount: 2,
           crossAxisSpacing: 12,
           mainAxisSpacing: 12,
-          childAspectRatio: 1.55,
+          childAspectRatio: 1.35,
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
           children: [
@@ -216,60 +216,24 @@ class _DashboardBody extends StatelessWidget {
             children: [
               Text('Tình trạng xe',
                   style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Container(
-                              width: 10,
-                              height: 10,
-                              decoration: BoxDecoration(
-                                color: Colors.green,
-                                shape: BoxShape.circle,
-                              ),
-                            ),
-                            const SizedBox(width: 6),
-                            Text('Sẵn sàng', style: tt.bodySmall),
-                            const Spacer(),
-                            Text(
-                              availableCars.toString(),
-                              style: tt.titleSmall?.copyWith(
-                                  fontWeight: FontWeight.w700,
-                                  color: Colors.green),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 6),
-                        Row(
-                          children: [
-                            Container(
-                              width: 10,
-                              height: 10,
-                              decoration: BoxDecoration(
-                                color: Colors.blue,
-                                shape: BoxShape.circle,
-                              ),
-                            ),
-                            const SizedBox(width: 6),
-                            Text('Đang thuê', style: tt.bodySmall),
-                            const Spacer(),
-                            Text(
-                              bookedCars.toString(),
-                              style: tt.titleSmall?.copyWith(
-                                  fontWeight: FontWeight.w700,
-                                  color: Colors.blue),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
+              const SizedBox(height: 4),
+              Text(
+                'Nhấn để xem danh sách xe',
+                style: tt.bodySmall?.copyWith(color: cs.outline),
+              ),
+              const SizedBox(height: 12),
+              _CarStatusTapRow(
+                label: 'Sẵn sàng',
+                count: availableCars,
+                color: Colors.green,
+                onTap: () => context.push('/admin/cars?status=AVAILABLE'),
+              ),
+              const SizedBox(height: 8),
+              _CarStatusTapRow(
+                label: 'Đang thuê',
+                count: bookedCars,
+                color: Colors.blue,
+                onTap: () => context.push('/admin/cars?status=BOOKED'),
               ),
               const SizedBox(height: 12),
               if (totalCarsForBar > 0)
@@ -386,38 +350,94 @@ class _StatCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(AppTheme.radiusCard),
         boxShadow: [AppTheme.softShadow],
       ),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Container(
-            width: 36,
-            height: 36,
+            width: 34,
+            height: 34,
             decoration: BoxDecoration(
               color: color.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(10),
             ),
-            child: Icon(icon, color: color, size: 20),
+            child: Icon(icon, color: color, size: 18),
           ),
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                value,
-                style: tt.titleLarge?.copyWith(
-                  fontWeight: FontWeight.w800,
-                  fontSize: 22,
-                  color: color,
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  value,
+                  style: tt.titleLarge?.copyWith(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 22,
+                    color: color,
+                  ),
                 ),
               ),
               Text(
                 label,
                 style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
             ],
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _CarStatusTapRow extends StatelessWidget {
+  const _CarStatusTapRow({
+    required this.label,
+    required this.count,
+    required this.color,
+    required this.onTap,
+  });
+
+  final String label;
+  final int count;
+  final Color color;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final tt = Theme.of(context).textTheme;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(10),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+          child: Row(
+            children: [
+              Container(
+                width: 10,
+                height: 10,
+                decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+              ),
+              const SizedBox(width: 8),
+              Expanded(child: Text(label, style: tt.bodyMedium)),
+              Text(
+                count.toString(),
+                style: tt.titleSmall?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  color: color,
+                ),
+              ),
+              const SizedBox(width: 4),
+              Icon(Icons.chevron_right_rounded,
+                  size: 18, color: color.withValues(alpha: 0.7)),
+            ],
+          ),
+        ),
       ),
     );
   }

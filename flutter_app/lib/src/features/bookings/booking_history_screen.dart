@@ -8,6 +8,7 @@ import '../../core/utils/toast_utils.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/app_ui.dart';
+import '../cars/car_list_screen.dart';
 
 final bookingHistoryProvider = FutureProvider<List<Map<String, dynamic>>>((ref) async {
   final dio = ref.read(dioProvider);
@@ -168,9 +169,12 @@ class BookingHistoryScreen extends ConsumerWidget {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    '${booking['carBrand'] ?? ''} ${booking['carName'] ?? ''}',
+                                    carDisplayTitle(
+                                      booking['carBrand']?.toString(),
+                                      booking['carName']?.toString(),
+                                    ),
                                     style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w700),
-                                    maxLines: 1,
+                                    maxLines: 2,
                                     overflow: TextOverflow.ellipsis,
                                   ),
                                   const SizedBox(height: AppSpacing.xs),

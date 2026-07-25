@@ -7,6 +7,7 @@ import '../../core/network/dio_provider.dart';
 import '../../core/utils/toast_utils.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/widgets/app_ui.dart';
+import '../cars/car_list_screen.dart';
 
 final invoiceListProvider = FutureProvider<List<Map<String, dynamic>>>((ref) async {
   final dio = ref.read(dioProvider);
@@ -117,8 +118,13 @@ class InvoiceListScreen extends ConsumerWidget {
                                   ),
                                   const SizedBox(height: 4),
                                   Text(
-                                    invoice['carName']?.toString() ?? '',
+                                    carDisplayTitle(
+                                      invoice['carBrand']?.toString(),
+                                      invoice['carName']?.toString(),
+                                    ),
                                     style: tt.bodySmall,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
                                   ),
                                 ],
                               ),

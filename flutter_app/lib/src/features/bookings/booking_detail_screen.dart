@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/network/dio_provider.dart';
 import '../../core/theme/app_theme.dart';
+import '../cars/car_list_screen.dart';
 import 'payment_webview_screen.dart';
 import 'review_dialog.dart';
 
@@ -190,33 +191,50 @@ class BookingDetailScreen extends ConsumerWidget {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(
-                                  '${booking['carBrand']} ${booking['carName']}',
-                                  style: tt.headlineSmall?.copyWith(fontWeight: FontWeight.w800, fontSize: 20),
+                                _TooltipText(
+                                  carDisplayTitle(
+                                    booking['carBrand']?.toString(),
+                                    booking['carName']?.toString(),
+                                  ),
+                                  style: tt.headlineSmall?.copyWith(
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 20,
+                                  ),
+                                  maxLines: 2,
                                 ),
-                                const SizedBox(height: 4),
+                                const SizedBox(height: 6),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: statusColor.withValues(alpha: 0.1),
+                                    borderRadius: BorderRadius.circular(AppTheme.radiusPill),
+                                  ),
+                                  child: Text(
+                                    _statusLabel(status),
+                                    style: tt.labelSmall?.copyWith(
+                                      color: statusColor,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
                                 Row(
                                   children: [
                                     Icon(Icons.pin_rounded, size: 14, color: cs.outline),
                                     const SizedBox(width: 4),
-                                    Text(
-                                      booking['carLicensePlate'] ?? 'Đang cập nhật',
-                                      style: tt.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+                                    Expanded(
+                                      child: Text(
+                                        booking['carLicensePlate']?.toString() ?? 'Đang cập nhật',
+                                        style: tt.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
                                     ),
                                   ],
                                 ),
                               ],
-                            ),
-                          ),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                            decoration: BoxDecoration(
-                              color: statusColor.withValues(alpha: 0.1),
-                              borderRadius: BorderRadius.circular(AppTheme.radiusPill),
-                            ),
-                            child: Text(
-                              _statusLabel(status),
-                              style: tt.labelSmall?.copyWith(color: statusColor, fontWeight: FontWeight.w700),
                             ),
                           ),
                         ],
@@ -228,39 +246,11 @@ class BookingDetailScreen extends ConsumerWidget {
                       const SizedBox(height: 16),
                       _buildInfoRow(context, Icons.receipt_long_rounded, 'Mã hóa đơn', booking['invoiceId']?.toString() ?? 'Chưa tạo'),
                       const SizedBox(height: 16),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Row(
-                            children: [
-                              Icon(Icons.payment_rounded, size: 20, color: cs.onSurfaceVariant),
-                              const SizedBox(width: 12),
-                              Text('Tiền cọc giữ xe (30%)', style: tt.bodyMedium),
-                            ],
-                          ),
-                          Text(
-                            '$formattedDeposit vnđ',
-                            style: tt.titleMedium?.copyWith(color: cs.secondary, fontWeight: FontWeight.bold),
-                          ),
-                        ],
-                      ),
+                      _buildInfoRow(context, Icons.payment_rounded, 'Tiền cọc giữ xe (30%)', '$formattedDeposit vnđ',
+                          valueColor: cs.secondary),
                       const SizedBox(height: 16),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Row(
-                            children: [
-                              Icon(Icons.payments_rounded, size: 20, color: cs.onSurfaceVariant),
-                              const SizedBox(width: 12),
-                              Text('Tổng tiền', style: tt.bodyMedium),
-                            ],
-                          ),
-                          Text(
-                            '$formattedPrice vnđ',
-                            style: tt.titleLarge?.copyWith(color: cs.primary, fontWeight: FontWeight.w800),
-                          ),
-                        ],
-                      ),
+                      _buildInfoRow(context, Icons.payments_rounded, 'Tổng tiền', '$formattedPrice vnđ',
+                          valueColor: cs.primary, valueBold: true),
                     ],
                   ),
                 ),
@@ -461,7 +451,14 @@ class BookingDetailScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildInfoRow(BuildContext context, IconData icon, String label, String value) {
+  Widget _buildInfoRow(
+    BuildContext context,
+    IconData icon,
+    String label,
+    String value, {
+    Color? valueColor,
+    bool valueBold = false,
+  }) {
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
     return Row(
@@ -471,13 +468,19 @@ class BookingDetailScreen extends ConsumerWidget {
         const SizedBox(width: 12),
         Expanded(
           flex: 2,
-          child: Text(label, style: tt.bodyMedium),
+          child: Text(label, style: tt.bodyMedium, maxLines: 2, overflow: TextOverflow.ellipsis),
         ),
+        const SizedBox(width: 8),
         Expanded(
           flex: 3,
-          child: Text(
+          child: _TooltipText(
             value,
-            style: tt.bodyMedium?.copyWith(fontWeight: FontWeight.w600, color: cs.onSurface),
+            style: tt.bodyMedium?.copyWith(
+              fontWeight: valueBold ? FontWeight.w800 : FontWeight.w600,
+              color: valueColor ?? cs.onSurface,
+              fontSize: valueBold ? 18 : null,
+            ),
+            maxLines: 2,
             textAlign: TextAlign.right,
           ),
         ),
@@ -488,6 +491,7 @@ class BookingDetailScreen extends ConsumerWidget {
   Widget _buildLocationItem(BuildContext context, IconData icon, String label, String value, Color color) {
     final tt = Theme.of(context).textTheme;
     return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Container(
           padding: const EdgeInsets.all(10),
@@ -504,11 +508,44 @@ class BookingDetailScreen extends ConsumerWidget {
             children: [
               Text(label, style: tt.bodySmall),
               const SizedBox(height: 2),
-              Text(value, style: tt.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
+              _TooltipText(
+                value,
+                style: tt.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+                maxLines: 2,
+              ),
             ],
           ),
         ),
       ],
+    );
+  }
+}
+
+class _TooltipText extends StatelessWidget {
+  const _TooltipText(
+    this.text, {
+    this.style,
+    this.maxLines = 2,
+    this.textAlign,
+  });
+
+  final String text;
+  final TextStyle? style;
+  final int maxLines;
+  final TextAlign? textAlign;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: text,
+      waitDuration: const Duration(milliseconds: 400),
+      child: Text(
+        text,
+        style: style,
+        maxLines: maxLines,
+        overflow: TextOverflow.ellipsis,
+        textAlign: textAlign,
+      ),
     );
   }
 }

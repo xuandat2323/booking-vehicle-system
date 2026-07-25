@@ -8,12 +8,21 @@ final adminBookingsProvider =
     FutureProvider.autoDispose.family<List<Map<String, dynamic>>, String>(
         (ref, statusFilter) async {
   final dio = ref.read(dioProvider);
-  final queryParams = <String, dynamic>{'page': 0, 'size': 50};
-  if (statusFilter.isNotEmpty) queryParams['status'] = statusFilter;
-  final response =
-      await dio.get('/api/admin/bookings', queryParameters: queryParams);
+  final response = await dio.get(
+    '/api/admin/bookings',
+    queryParameters: {'page': 0, 'size': 50},
+  );
   final data = response.data['data'] as Map<String, dynamic>;
-  return (data['content'] as List<dynamic>).cast<Map<String, dynamic>>();
+  final all =
+      (data['content'] as List<dynamic>).cast<Map<String, dynamic>>();
+  if (statusFilter.isEmpty) return all;
+  // Map legacy IN_PROGRESS → RENTING for filter chips
+  final wanted = statusFilter == 'IN_PROGRESS' ? 'RENTING' : statusFilter;
+  return all.where((b) {
+    final s = b['status']?.toString() ?? '';
+    if (wanted == 'RENTING') return s == 'RENTING' || s == 'IN_PROGRESS';
+    return s == wanted;
+  }).toList();
 });
 
 class AdminBookingsScreen extends ConsumerStatefulWidget {
@@ -29,9 +38,10 @@ class _AdminBookingsScreenState extends ConsumerState<AdminBookingsScreen> {
 
   static const _filters = [
     ('Tất cả', ''),
-    ('Chờ duyệt', 'PENDING'),
+    ('Chờ cọc', 'PENDING'),
+    ('Chờ duyệt cọc', 'DEPOSIT_PAID'),
     ('Đã xác nhận', 'CONFIRMED'),
-    ('Đang thuê', 'IN_PROGRESS'),
+    ('Đang thuê', 'RENTING'),
     ('Hoàn thành', 'COMPLETED'),
     ('Đã hủy', 'CANCELLED'),
   ];
@@ -155,8 +165,9 @@ class _AdminBookingsScreenState extends ConsumerState<AdminBookingsScreen> {
   Color _statusColor(String status, ColorScheme cs) {
     return switch (status) {
       'PENDING' => Colors.orange,
+      'DEPOSIT_PAID' => Colors.amber.shade800,
       'CONFIRMED' => Colors.blue,
-      'IN_PROGRESS' => const Color(0xFF9C4FE8),
+      'RENTING' || 'IN_PROGRESS' => const Color(0xFF9C4FE8),
       'COMPLETED' => Colors.green,
       'CANCELLED' => Colors.red,
       _ => cs.primary,
@@ -171,56 +182,60 @@ class _AdminBookingsScreenState extends ConsumerState<AdminBookingsScreen> {
     final bookingId = booking['bookingId'];
     final carName = booking['carName']?.toString() ?? '';
 
-    final (actionLabel, endpoint, confirmMsg) = switch (action) {
+    final (title, endpoint, confirmMsg, successLabel) = switch (action) {
       'confirm' => (
-          'duyệt đơn cọc',
+          'Duyệt đơn cọc',
           '/api/admin/bookings/$bookingId/confirm',
-          'Xác nhận đã nhận cọc và duyệt đơn giữ xe "$carName"?'
+          'Xác nhận đã nhận cọc và duyệt đơn giữ xe "$carName"?',
+          'duyệt cọc',
         ),
       'cancel' => (
-          'hủy',
+          'Hủy đơn',
           '/api/admin/bookings/$bookingId/cancel',
-          'Hủy đơn đặt xe "$carName"? Hành động này không thể hoàn tác.'
+          'Hủy đơn đặt xe "$carName"? Hành động này không thể hoàn tác.',
+          'hủy',
         ),
       'handover' => (
-          'bàn giao xe',
+          'Bàn giao xe',
           '/api/admin/bookings/$bookingId/handover',
-          'Tiến hành bàn giao xe "$carName" cho khách hàng bắt đầu thuê?'
+          'Tiến hành bàn giao xe "$carName" cho khách hàng bắt đầu thuê?',
+          'bàn giao',
         ),
       'return' => (
-          'nhận trả xe',
+          'Nhận trả xe',
           '/api/admin/bookings/$bookingId/return',
-          'Xác nhận khách hàng đã trả xe "$carName"?'
+          'Xác nhận khách hàng đã trả xe "$carName"?',
+          'nhận trả',
         ),
       'complete' => (
-          'hoàn thành',
+          'Hoàn thành đơn',
           '/api/admin/bookings/$bookingId/complete',
-          'Xác nhận hoàn tất đơn "$carName", thanh toán nốt và trả cọc?'
+          'Xác nhận hoàn tất đơn "$carName", thanh toán nốt và trả cọc?',
+          'hoàn thành',
         ),
-      _ => ('', '', ''),
+      _ => ('', '', '', ''),
     };
 
     if (endpoint.isEmpty) return;
 
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (_) => AlertDialog(
-        title: Text(
-            '${actionLabel[0].toUpperCase()}${actionLabel.substring(1)} đơn'),
+      useRootNavigator: true,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(title),
         content: Text(confirmMsg),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context, false),
+            onPressed: () => Navigator.of(dialogContext).pop(false),
             child: const Text('Huỷ'),
           ),
           FilledButton(
             style: action == 'cancel'
                 ? FilledButton.styleFrom(
-                    backgroundColor: Theme.of(context).colorScheme.error)
+                    backgroundColor: Theme.of(dialogContext).colorScheme.error)
                 : null,
-            onPressed: () => Navigator.pop(context, true),
-            child: Text(
-                '${actionLabel[0].toUpperCase()}${actionLabel.substring(1)}'),
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: Text(title),
           ),
         ],
       ),
@@ -228,18 +243,31 @@ class _AdminBookingsScreenState extends ConsumerState<AdminBookingsScreen> {
 
     if (confirmed != true || !context.mounted) return;
 
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      useRootNavigator: true,
+      builder: (_) => const Center(child: CircularProgressIndicator()),
+    );
+
     try {
       await ref.read(dioProvider).put(endpoint);
+      if (context.mounted) {
+        Navigator.of(context, rootNavigator: true).pop(); // loading
+      }
       ref.invalidate(adminBookingsProvider(_selectedStatus));
+      ref.invalidate(adminBookingsProvider(''));
+      if (_selectedStatus != 'DEPOSIT_PAID') {
+        ref.invalidate(adminBookingsProvider('DEPOSIT_PAID'));
+      }
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-              content: Text(
-                  'Đã $actionLabel đơn đặt xe "${booking['carName']}"')),
+          SnackBar(content: Text('Đã $successLabel đơn "$carName"')),
         );
       }
     } catch (e) {
       if (context.mounted) {
+        Navigator.of(context, rootNavigator: true).pop(); // loading
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text('Lỗi: $e')));
       }
@@ -323,11 +351,15 @@ class _BookingCardState extends State<_BookingCard> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        b['carName']?.toString() ?? '',
-                        style: tt.titleSmall
-                            ?.copyWith(fontWeight: FontWeight.w700),
-                        overflow: TextOverflow.ellipsis,
+                      Tooltip(
+                        message: b['carName']?.toString() ?? '',
+                        child: Text(
+                          b['carName']?.toString() ?? '',
+                          style: tt.titleSmall
+                              ?.copyWith(fontWeight: FontWeight.w700),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
                       const SizedBox(height: 2),
                       Row(
@@ -349,7 +381,7 @@ class _BookingCardState extends State<_BookingCard> {
                   ),
                 ),
                 const SizedBox(width: 8),
-                _StatusChip(label: statusLabel, color: statusColor),
+                Flexible(child: _StatusChip(label: statusLabel, color: statusColor)),
               ],
             ),
 
@@ -469,6 +501,8 @@ class _StatusChip extends StatelessWidget {
               color: color,
               fontWeight: FontWeight.w700,
             ),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
       ),
     );
   }

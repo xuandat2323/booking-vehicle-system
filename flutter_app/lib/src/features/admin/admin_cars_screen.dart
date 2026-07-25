@@ -16,17 +16,39 @@ final adminCarsProvider =
   final dio = ref.read(dioProvider);
   final response = await dio.get(
     '/api/admin/cars',
-    queryParameters: {'page': 0, 'size': 50},
+    queryParameters: {'page': 0, 'size': 100},
   );
   final data = response.data['data'] as Map<String, dynamic>;
   return (data['content'] as List<dynamic>).cast<Map<String, dynamic>>();
 });
 
-class AdminCarsScreen extends ConsumerWidget {
-  const AdminCarsScreen({super.key});
+class AdminCarsScreen extends ConsumerStatefulWidget {
+  const AdminCarsScreen({super.key, this.initialStatus});
+
+  final String? initialStatus;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<AdminCarsScreen> createState() => _AdminCarsScreenState();
+}
+
+class _AdminCarsScreenState extends ConsumerState<AdminCarsScreen> {
+  late String _statusFilter;
+
+  static const _filters = [
+    ('Tất cả', ''),
+    ('Sẵn sàng', 'AVAILABLE'),
+    ('Đang thuê', 'BOOKED'),
+    ('Bảo dưỡng', 'MAINTENANCE'),
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _statusFilter = widget.initialStatus?.toUpperCase() ?? '';
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final carsAsync = ref.watch(adminCarsProvider);
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
@@ -38,82 +60,134 @@ class AdminCarsScreen extends ConsumerWidget {
         icon: const Icon(Icons.add_rounded),
         label: const Text('Thêm xe'),
       ),
-      body: RefreshIndicator(
-        onRefresh: () async => ref.invalidate(adminCarsProvider),
-        child: carsAsync.when(
-          data: (cars) => cars.isEmpty
-              ? ListView(
+      body: Column(
+        children: [
+          SizedBox(
+            height: 52,
+            child: ListView.separated(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+              scrollDirection: Axis.horizontal,
+              itemCount: _filters.length,
+              separatorBuilder: (_, _) => const SizedBox(width: 8),
+              itemBuilder: (context, i) {
+                final (label, value) = _filters[i];
+                final isSelected = _statusFilter == value;
+                return FilterChip(
+                  label: Text(label),
+                  selected: isSelected,
+                  onSelected: (_) => setState(() => _statusFilter = value),
+                  labelStyle: tt.labelSmall?.copyWith(
+                    fontWeight: FontWeight.w600,
+                    color: isSelected ? cs.primary : cs.onSurfaceVariant,
+                  ),
+                  selectedColor: cs.primary.withValues(alpha: 0.12),
+                  showCheckmark: false,
+                  side: isSelected
+                      ? BorderSide(color: cs.primary.withValues(alpha: 0.4))
+                      : BorderSide.none,
+                  backgroundColor: cs.surfaceContainerLow,
+                );
+              },
+            ),
+          ),
+          Expanded(
+            child: RefreshIndicator(
+              onRefresh: () async => ref.invalidate(adminCarsProvider),
+              child: carsAsync.when(
+                data: (cars) {
+                  final filtered = _statusFilter.isEmpty
+                      ? cars
+                      : cars
+                          .where((c) =>
+                              (c['status']?.toString() ?? '') == _statusFilter)
+                          .toList();
+                  if (filtered.isEmpty) {
+                    return ListView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      children: [
+                        SizedBox(
+                          height: MediaQuery.of(context).size.height * 0.45,
+                          child: Center(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.directions_car_outlined,
+                                    size: 64, color: cs.outlineVariant),
+                                const SizedBox(height: AppSpacing.md),
+                                Text('Không có xe nào', style: tt.titleMedium),
+                                const SizedBox(height: 8),
+                                Text(
+                                  'Thử chọn bộ lọc khác',
+                                  style: tt.bodyMedium
+                                      ?.copyWith(color: cs.outline),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    );
+                  }
+                  return ListView.separated(
+                    padding: const EdgeInsets.fromLTRB(
+                      AppSpacing.page,
+                      AppSpacing.md,
+                      AppSpacing.page,
+                      AppSpacing.xxl + 56,
+                    ),
+                    itemCount: filtered.length,
+                    separatorBuilder: (context, index) =>
+                        const SizedBox(height: AppSpacing.md),
+                    itemBuilder: (context, i) {
+                      final car = filtered[i];
+                      return FadeSlideIn(
+                        delay: Duration(milliseconds: 30 * i),
+                        child: _CarCard(
+                          car: car,
+                          onEdit: () => _showCarForm(context, ref, car: car),
+                          onDelete: () => _confirmDelete(context, ref, car),
+                        ),
+                      );
+                    },
+                  );
+                },
+                loading: () => const Center(child: CircularProgressIndicator()),
+                error: (e, _) => ListView(
                   physics: const AlwaysScrollableScrollPhysics(),
                   children: [
                     SizedBox(
                       height: MediaQuery.of(context).size.height * 0.5,
                       child: Center(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.directions_car_outlined,
-                                size: 64, color: cs.outlineVariant),
-                            const SizedBox(height: AppSpacing.md),
-                            Text('Chưa có xe nào', style: tt.titleMedium),
-                          ],
+                        child: Padding(
+                          padding: const EdgeInsets.all(AppSpacing.xxl),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.error_outline_rounded,
+                                  size: 48, color: cs.error),
+                              const SizedBox(height: AppSpacing.md),
+                              Text(
+                                ToastUtils.mapError(e),
+                                textAlign: TextAlign.center,
+                                style: tt.bodyMedium?.copyWith(color: cs.error),
+                              ),
+                              const SizedBox(height: AppSpacing.md),
+                              OutlinedButton(
+                                onPressed: () =>
+                                    ref.invalidate(adminCarsProvider),
+                                child: const Text('Thử lại'),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     ),
                   ],
-                )
-              : ListView.separated(
-                  padding: const EdgeInsets.fromLTRB(
-                    AppSpacing.page,
-                    AppSpacing.md,
-                    AppSpacing.page,
-                    AppSpacing.xxl + 56,
-                  ),
-                  itemCount: cars.length,
-                  separatorBuilder: (context, index) => const SizedBox(height: AppSpacing.md),
-                  itemBuilder: (context, i) {
-                    final car = cars[i];
-                    return FadeSlideIn(
-                      delay: Duration(milliseconds: 30 * i),
-                      child: _CarCard(
-                        car: car,
-                        onEdit: () => _showCarForm(context, ref, car: car),
-                        onDelete: () => _confirmDelete(context, ref, car),
-                      ),
-                    );
-                  },
-                ),
-          loading: () => const Center(child: CircularProgressIndicator()),
-          error: (e, _) => ListView(
-            physics: const AlwaysScrollableScrollPhysics(),
-            children: [
-              SizedBox(
-                height: MediaQuery.of(context).size.height * 0.5,
-                child: Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(AppSpacing.xxl),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.error_outline_rounded, size: 48, color: cs.error),
-                        const SizedBox(height: AppSpacing.md),
-                        Text(
-                          ToastUtils.mapError(e),
-                          textAlign: TextAlign.center,
-                          style: tt.bodyMedium?.copyWith(color: cs.error),
-                        ),
-                        const SizedBox(height: AppSpacing.md),
-                        OutlinedButton(
-                          onPressed: () => ref.invalidate(adminCarsProvider),
-                          child: const Text('Thử lại'),
-                        ),
-                      ],
-                    ),
-                  ),
                 ),
               ),
-            ],
+            ),
           ),
-        ),
+        ],
       ),
     );
   }
@@ -125,6 +199,7 @@ class AdminCarsScreen extends ConsumerWidget {
   }) async {
     final saved = await showDialog<bool>(
       context: context,
+      useRootNavigator: true,
       builder: (_) => _CarFormDialog(car: car),
     );
     if (saved == true) ref.invalidate(adminCarsProvider);
@@ -140,19 +215,20 @@ class AdminCarsScreen extends ConsumerWidget {
 
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (_) => AlertDialog(
+      useRootNavigator: true,
+      builder: (dialogContext) => AlertDialog(
         title: const Text('Xóa xe'),
         content: Text(
             'Bạn có chắc muốn xóa xe "$carName"?\nHành động này không thể hoàn tác.'),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context, false),
+            onPressed: () => Navigator.of(dialogContext).pop(false),
             child: const Text('Huỷ'),
           ),
           FilledButton(
             style: FilledButton.styleFrom(
-                backgroundColor: Theme.of(context).colorScheme.error),
-            onPressed: () => Navigator.pop(context, true),
+                backgroundColor: Theme.of(dialogContext).colorScheme.error),
+            onPressed: () => Navigator.of(dialogContext).pop(true),
             child: const Text('Xóa'),
           ),
         ],
@@ -487,10 +563,14 @@ class _CarCard extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Expanded(
-                          child: Text(
-                            title,
-                            style: tt.titleSmall?.copyWith(fontWeight: FontWeight.w700),
-                            overflow: TextOverflow.ellipsis,
+                          child: Tooltip(
+                            message: title,
+                            child: Text(
+                              title,
+                              style: tt.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
                           ),
                         ),
                         const SizedBox(width: AppSpacing.xs),

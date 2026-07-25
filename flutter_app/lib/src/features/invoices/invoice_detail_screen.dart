@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/network/dio_provider.dart';
+import '../cars/car_list_screen.dart';
 
 final invoiceDetailProvider = FutureProvider.family<Map<String, dynamic>, String>((ref, invoiceId) async {
   final dio = ref.read(dioProvider);
@@ -72,7 +73,13 @@ class InvoiceDetailScreen extends ConsumerWidget {
                 title: 'Thông tin xe',
                 icon: Icons.directions_car,
                 rows: [
-                  _InfoRow(label: 'Xe', value: '${invoice['carBrand'] ?? ''} ${invoice['carName'] ?? ''}'),
+                  _InfoRow(
+                    label: 'Xe',
+                    value: carDisplayTitle(
+                      invoice['carBrand']?.toString(),
+                      invoice['carName']?.toString(),
+                    ),
+                  ),
                   _InfoRow(label: 'Biển số', value: invoice['carLicensePlate']?.toString() ?? ''),
                 ],
               ),
