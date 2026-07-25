@@ -125,7 +125,13 @@ public class GeminiService {
             - seats: số nguyên hoặc mảng số (vd 7 hoặc [7])
             - fuelType: GASOLINE|DIESEL|ELECTRIC|HYBRID
             - transmission: AUTOMATIC|MANUAL
-            - Giá VND/ngày. "giá rẻ"/dưới 1tr → maxPrice 900000; tầm trung → 800000–1600000; cao cấp → minPrice 2000000
+            - Giá VND/ngày. Bám sát ngữ nghĩa:
+              • "trên|hơn|lớn hơn|từ|tối thiểu X" → minPrice = X (KHÔNG đặt maxPrice)
+              • "dưới|ít hơn|không quá|tối đa X" → maxPrice = X (KHÔNG đặt minPrice)
+              • "từ X đến Y" → minPrice = X, maxPrice = Y
+              • "khoảng|tầm X" → minPrice = 0.8*X, maxPrice = 1.2*X
+              • "giá rẻ" → maxPrice 900000; "tầm trung" → 800000–1600000; "cao cấp|hạng sang" → minPrice 2000000
+              • Quy đổi: "2 triệu"/"2tr" = 2000000; "800k"/"800 nghìn" = 800000
             - "Hoàn Kiếm|Tràng Tiền" → location "Hoàn Kiếm"; "Cầu Giấy|Duy Tân|Mỹ Đình" → "Cầu Giấy"; "Thanh Xuân|Nguyễn Trãi" → "Thanh Xuân"
             - Typo/slang tiếng Việt vẫn parse được (vd mec, vf8, 7cho)
             - Chỉ điền field chắc chắn suy ra được. Không bịa.

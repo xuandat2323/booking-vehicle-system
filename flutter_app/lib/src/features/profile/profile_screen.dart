@@ -6,6 +6,7 @@ import '../../core/auth/auth_provider.dart';
 import '../../core/network/dio_provider.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/utils/toast_utils.dart';
 import '../../core/widgets/app_ui.dart';
 import '../verification/verification_provider.dart';
 
@@ -119,7 +120,17 @@ class ProfileScreen extends ConsumerWidget {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  const SectionHeader(title: 'Thông tin cá nhân'),
+                                  SectionHeader(
+                                    title: 'Thông tin cá nhân',
+                                    actionLabel: 'Chỉnh sửa',
+                                    onAction: () => _editProfile(
+                                      context,
+                                      ref,
+                                      name: name.toString(),
+                                      email: email.toString(),
+                                      license: license.toString(),
+                                    ),
+                                  ),
                                   _buildInfoRow(context, Icons.phone_iphone_rounded, 'Số điện thoại', phone),
                                   const SizedBox(height: AppSpacing.lg),
                                   _buildInfoRow(context, Icons.email_rounded, 'Email liên hệ', email),
@@ -152,9 +163,15 @@ class ProfileScreen extends ConsumerWidget {
                                       crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
                                         Row(children: [
-                                          Text('Xác minh danh tính',
+                                          Flexible(
+                                            child: Text(
+                                              'Xác minh danh tính',
                                               style: tt.titleMedium
-                                                  ?.copyWith(fontWeight: FontWeight.w600)),
+                                                  ?.copyWith(fontWeight: FontWeight.w600),
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ),
                                           const SizedBox(width: AppSpacing.sm),
                                           if (verifyStatus != null)
                                             _VerifyBadge(status: verifyStatus),
@@ -264,6 +281,27 @@ class ProfileScreen extends ConsumerWidget {
     );
   }
 
+  void _editProfile(
+    BuildContext context,
+    WidgetRef ref, {
+    required String name,
+    required String email,
+    required String license,
+  }) {
+    String clean(String v) => v == 'Chưa cập nhật' ? '' : v;
+    showDialog<bool>(
+      context: context,
+      useRootNavigator: true,
+      builder: (_) => _EditProfileDialog(
+        initialName: clean(name),
+        initialEmail: clean(email),
+        initialLicense: clean(license),
+      ),
+    ).then((saved) {
+      if (saved == true) ref.invalidate(userProfileProvider);
+    });
+  }
+
   Widget _buildInfoRow(BuildContext context, IconData icon, String label, String value) {
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
@@ -287,6 +325,131 @@ class ProfileScreen extends ConsumerWidget {
               Text(value, style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
             ],
           ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Cho phép user cập nhật tên, email, GPLX (đăng ký chỉ có SĐT nên email trống).
+class _EditProfileDialog extends ConsumerStatefulWidget {
+  const _EditProfileDialog({
+    required this.initialName,
+    required this.initialEmail,
+    required this.initialLicense,
+  });
+
+  final String initialName;
+  final String initialEmail;
+  final String initialLicense;
+
+  @override
+  ConsumerState<_EditProfileDialog> createState() => _EditProfileDialogState();
+}
+
+class _EditProfileDialogState extends ConsumerState<_EditProfileDialog> {
+  final _formKey = GlobalKey<FormState>();
+  late final TextEditingController _nameController;
+  late final TextEditingController _emailController;
+  late final TextEditingController _licenseController;
+  bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _nameController = TextEditingController(text: widget.initialName);
+    _emailController = TextEditingController(text: widget.initialEmail);
+    _licenseController = TextEditingController(text: widget.initialLicense);
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _emailController.dispose();
+    _licenseController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    if (!_formKey.currentState!.validate()) return;
+    setState(() => _saving = true);
+    try {
+      await ref.read(dioProvider).put('/api/user/me', data: {
+        'name': _nameController.text.trim(),
+        'email': _emailController.text.trim(),
+        'driveLicense': _licenseController.text.trim(),
+      });
+      if (mounted) {
+        ToastUtils.showSuccess(context, 'Cập nhật thông tin thành công');
+        Navigator.of(context).pop(true);
+      }
+    } catch (e) {
+      if (mounted) ToastUtils.showError(context, e);
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Chỉnh sửa thông tin'),
+      content: SingleChildScrollView(
+        child: Form(
+          key: _formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextFormField(
+                controller: _nameController,
+                textCapitalization: TextCapitalization.words,
+                decoration: const InputDecoration(
+                  labelText: 'Họ và tên',
+                  prefixIcon: Icon(Icons.person_outline_rounded),
+                ),
+              ),
+              const SizedBox(height: AppSpacing.md),
+              TextFormField(
+                controller: _emailController,
+                keyboardType: TextInputType.emailAddress,
+                decoration: const InputDecoration(
+                  labelText: 'Email liên hệ',
+                  prefixIcon: Icon(Icons.email_outlined),
+                ),
+                validator: (v) {
+                  final s = (v ?? '').trim();
+                  if (s.isEmpty) return null;
+                  final ok = RegExp(r'^[\w.\-]+@[\w\-]+\.[\w.\-]+$').hasMatch(s);
+                  return ok ? null : 'Email không hợp lệ';
+                },
+              ),
+              const SizedBox(height: AppSpacing.md),
+              TextFormField(
+                controller: _licenseController,
+                textCapitalization: TextCapitalization.characters,
+                decoration: const InputDecoration(
+                  labelText: 'Số bằng lái xe',
+                  prefixIcon: Icon(Icons.badge_outlined),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _saving ? null : () => Navigator.of(context).pop(false),
+          child: const Text('Huỷ'),
+        ),
+        FilledButton(
+          onPressed: _saving ? null : _submit,
+          child: _saving
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Text('Lưu'),
         ),
       ],
     );

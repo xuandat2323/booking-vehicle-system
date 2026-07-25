@@ -31,12 +31,26 @@ public class ChatbotService {
     private final CarService carService;
     private final ObjectMapper objectMapper;
 
-    private static final Pattern PRICE_UNDER = Pattern.compile(
-            "(?:duoi|dưới|<|<=|toi da|tối đa|max)\\s*(\\d+(?:[.,]\\d+)?)\\s*(trieu|tr|k|ngan|nghìn)?",
-            Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
-    private static final Pattern PRICE_FROM = Pattern.compile(
-            "(?:tu|từ|>=|>|toi thieu|tối thiểu|min)\\s*(\\d+(?:[.,]\\d+)?)\\s*(trieu|tr|k|ngan|nghìn)?",
-            Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
+    // Các pattern giá chạy trên chuỗi ĐÃ normalize (bỏ dấu, đ→d, thường hoá).
+    private static final String NUM = "(\\d+(?:[.,]\\d+)?)";
+    private static final String UNIT = "\\s*(trieu|tr|k|ngan|nghin|dong|d|vnd)?";
+
+    /** "từ 1 đến 2 triệu", "1 - 2 triệu", "1tr~2tr", "giữa 1 và 2 triệu". */
+    private static final Pattern PRICE_RANGE = Pattern.compile(
+            "(?:tu|giua|from)?\\s*" + NUM + UNIT
+                    + "\\s*(?:den|toi|->|-|~|va)\\s*" + NUM + UNIT);
+    /** "trên/hơn/lớn hơn/từ/tối thiểu 2 triệu". */
+    private static final Pattern PRICE_MIN = Pattern.compile(
+            "(?:tren|hon|lon hon|cao hon|>=|>|tu|toi thieu|it nhat|min)\\s*" + NUM + UNIT);
+    /** "dưới/thấp hơn/ít hơn/không quá/tối đa 2 triệu". */
+    private static final Pattern PRICE_MAX = Pattern.compile(
+            "(?:duoi|thap hon|it hon|nho hon|re hon|khong qua|chua toi|toi da|<=|<|max)\\s*" + NUM + UNIT);
+    /** "khoảng/tầm/xấp xỉ/cỡ giá 1 triệu" → dải ±20%. (Không nhận 'có'/'gần' đơn lẻ
+     *  để tránh bắt nhầm "có 5 chỗ", "gần Hoàn Kiếm".) */
+    private static final Pattern PRICE_AROUND = Pattern.compile(
+            "(?:khoang|tam|xap xi|co gia|gia khoang)\\s*" + NUM + UNIT);
+    /** "2 triệu" trơ trọi (không kèm từ khoá) → coi như khoảng giá gần đúng. */
+    private static final Pattern PRICE_BARE = Pattern.compile(NUM + "\\s*(trieu|tr)\\b");
 
     public Map<String, Object> processQuestion(String question) {
         Map<String, Object> result = new LinkedHashMap<>();
@@ -49,7 +63,12 @@ public class ChatbotService {
 
             if (geminiService.isAvailable()) {
                 Map<String, Object> geminiFilters = parseWithGemini(q);
-                // Keyword làm nền; Gemini bổ sung / ghi đè khi có giá trị rõ
+                // Giá suy ra từ số cụ thể là chính xác nhất → không cho Gemini ghi đè.
+                if (Boolean.TRUE.equals(filters.get("_priceLocked"))) {
+                    geminiFilters.remove("minPrice");
+                    geminiFilters.remove("maxPrice");
+                }
+                // Keyword làm nền; Gemini bổ sung / ghi đè phần còn lại khi có giá trị rõ.
                 mergeFilters(filters, geminiFilters);
             }
             sanitizeFilters(filters);
@@ -132,6 +151,9 @@ public class ChatbotService {
     }
 
     private void sanitizeFilters(Map<String, Object> filters) {
+        // Cờ nội bộ, không phải tiêu chí hiển thị cho khách.
+        filters.remove("_priceLocked");
+        filters.remove("_forceTips");
         // Bỏ location quá rộng / nhiễu
         Object loc = filters.get("location");
         if (loc instanceof String s) {
@@ -217,9 +239,11 @@ public class ChatbotService {
                 Map.entry("camry", "Camry"), Map.entry("c200", "C200"), Map.entry("cx-5", "CX-5"),
                 Map.entry("cx5", "CX-5"), Map.entry("cr-v", "CR-V"), Map.entry("crv", "CR-V"),
                 Map.entry("elantra", "Elantra"), Map.entry("santa fe", "Santa Fe"),
-                Map.entry("fortuner", "Fortuner"), Map.entry("ranger", "Ranger"),
-                Map.entry("xpander", "Xpander"), Map.entry("sorento", "Sorento"),
-                Map.entry("320i", "320i"), Map.entry("q5", "Q5")
+                Map.entry("santafe", "Santa Fe"), Map.entry("fortuner", "Fortuner"),
+                Map.entry("ranger", "Ranger"), Map.entry("xpander", "Xpander"),
+                Map.entry("sorento", "Sorento"), Map.entry("320i", "320i"),
+                Map.entry("q5", "Q5"), Map.entry("k3", "K3"), Map.entry("ertiga", "Ertiga"),
+                Map.entry("mazda2", "Mazda2"), Map.entry("mazda 2", "Mazda2")
         );
         for (var entry : modelHints.entrySet()) {
             if (q.contains(entry.getKey())) {
@@ -228,17 +252,21 @@ public class ChatbotService {
             }
         }
 
-        if (q.contains("7 cho") || q.contains("7cho") || q.matches(".*\\b7\\b.*cho.*")) {
+        // Số chỗ: bắt "N cho" tổng quát (2/4/5/7/9/16...), rồi tới gợi ý theo nhu cầu.
+        Matcher seatM = Pattern.compile("(\\d+)\\s*cho").matcher(q);
+        if (seatM.find()) {
+            int n = Integer.parseInt(seatM.group(1));
+            if (n >= 2 && n <= 16) filters.put("seats", List.of(n));
+        } else if (q.contains("gia dinh") || q.contains("dong nguoi") || q.contains("7 nguoi")
+                || q.contains("suv") || q.contains("da dung")) {
             filters.put("seats", List.of(7));
-        } else if (q.contains("5 cho") || q.contains("5cho") || q.matches(".*\\b5\\b.*cho.*")) {
-            filters.put("seats", List.of(5));
-        } else if (q.contains("4 cho") || q.contains("4cho")) {
+        } else if (q.contains("2 nguoi") || q.contains("cap doi") || q.contains("nho gon")
+                || q.contains("mini")) {
             filters.put("seats", List.of(4));
-        } else if (q.contains("gia dinh") || q.contains("dong nguoi") || q.contains("suv")) {
-            filters.put("seats", List.of(7));
         }
 
-        if (q.contains("gia re") || q.contains("re nhat") || q.contains("tiet kiem") || q.contains("binh dan")) {
+        // Tính từ về giá (chạy trước; số cụ thể sẽ ghi đè bên dưới).
+        if (q.contains("re nhat") || q.contains("gia re") || q.contains("tiet kiem") || q.contains("binh dan")) {
             filters.put("maxPrice", 900000);
             filters.put("sort", "priceAsc");
         } else if (q.contains("cao cap") || q.contains("hang sang") || q.contains("luxury") || q.contains("sang trong")) {
@@ -248,7 +276,10 @@ public class ChatbotService {
             filters.put("minPrice", 800000);
             filters.put("maxPrice", 1600000);
         }
+        if (q.contains("dat nhat") || q.contains("mac nhat")) filters.put("sort", "priceDesc");
+        if (q.contains("re nhat")) filters.put("sort", "priceAsc");
 
+        // Giá bằng số cụ thể — nguồn chính xác nhất, ghi đè tính từ ở trên.
         applyPricePatterns(q, filters);
 
         if (q.contains("dien") || q.contains("electric") || q.contains("ev ")) {
@@ -277,26 +308,74 @@ public class ChatbotService {
         return filters;
     }
 
+    /**
+     * Parse khoảng giá theo đúng ngữ nghĩa tiếng Việt. Đặt cờ _priceLocked để
+     * Gemini không ghi đè giá đã hiểu chắc chắn từ số cụ thể.
+     */
     private void applyPricePatterns(String q, Map<String, Object> filters) {
-        Matcher under = PRICE_UNDER.matcher(q);
-        if (under.find()) {
-            BigDecimal v = parsePriceToken(under.group(1), under.group(2));
-            if (v != null) filters.put("maxPrice", v);
-        }
-        Matcher from = PRICE_FROM.matcher(q);
-        if (from.find()) {
-            BigDecimal v = parsePriceToken(from.group(1), from.group(2));
-            if (v != null) filters.put("minPrice", v);
-        }
-        // "1tr", "1.5 triệu/ngày"
-        Matcher tr = Pattern.compile("(\\d+(?:[.,]\\d+)?)\\s*(trieu|tr)\\b").matcher(q);
-        if (tr.find() && !filters.containsKey("maxPrice") && !filters.containsKey("minPrice")) {
-            BigDecimal v = parsePriceToken(tr.group(1), tr.group(2));
-            if (v != null) {
-                filters.put("minPrice", v.multiply(new BigDecimal("0.7")));
-                filters.put("maxPrice", v.multiply(new BigDecimal("1.3")));
+        // 1) Dải "từ X đến Y" — ưu tiên cao nhất, set cả hai đầu.
+        Matcher range = PRICE_RANGE.matcher(q);
+        if (range.find()) {
+            String lowUnit = range.group(2);
+            String highUnit = range.group(4);
+            // Một đầu có đơn vị thì suy ra cho đầu còn lại (vd "từ 1 đến 2 triệu").
+            if (isBlank(lowUnit) && !isBlank(highUnit)) lowUnit = highUnit;
+            if (isBlank(highUnit) && !isBlank(lowUnit)) highUnit = lowUnit;
+            BigDecimal lo = parsePriceToken(range.group(1), lowUnit);
+            BigDecimal hi = parsePriceToken(range.group(3), highUnit);
+            if (lo != null && hi != null) {
+                if (lo.compareTo(hi) > 0) { BigDecimal t = lo; lo = hi; hi = t; }
+                filters.put("minPrice", lo);
+                filters.put("maxPrice", hi);
+                filters.put("_priceLocked", true);
+                return;
             }
         }
+
+        // 2) Cận dưới / cận trên — có thể xuất hiện đồng thời trong 1 câu.
+        boolean matched = false;
+        Matcher min = PRICE_MIN.matcher(q);
+        if (min.find()) {
+            BigDecimal v = parsePriceToken(min.group(1), min.group(2));
+            if (v != null) { filters.put("minPrice", v); matched = true; }
+        }
+        Matcher max = PRICE_MAX.matcher(q);
+        if (max.find()) {
+            BigDecimal v = parsePriceToken(max.group(1), max.group(2));
+            if (v != null) { filters.put("maxPrice", v); matched = true; }
+        }
+        if (matched) {
+            filters.put("_priceLocked", true);
+            return;
+        }
+
+        // 3) "khoảng/tầm X" → dải ±20%.
+        Matcher around = PRICE_AROUND.matcher(q);
+        if (around.find()) {
+            BigDecimal v = parsePriceToken(around.group(1), around.group(2));
+            if (v != null) {
+                filters.put("minPrice", v.multiply(new BigDecimal("0.8")).setScale(0, java.math.RoundingMode.HALF_UP));
+                filters.put("maxPrice", v.multiply(new BigDecimal("1.2")).setScale(0, java.math.RoundingMode.HALF_UP));
+                filters.put("_priceLocked", true);
+                return;
+            }
+        }
+
+        // 4) "X triệu" trơ (chưa có min/max từ tính từ) → dải gần đúng ±25%.
+        if (!filters.containsKey("maxPrice") && !filters.containsKey("minPrice")) {
+            Matcher bare = PRICE_BARE.matcher(q);
+            if (bare.find()) {
+                BigDecimal v = parsePriceToken(bare.group(1), bare.group(2));
+                if (v != null) {
+                    filters.put("minPrice", v.multiply(new BigDecimal("0.75")).setScale(0, java.math.RoundingMode.HALF_UP));
+                    filters.put("maxPrice", v.multiply(new BigDecimal("1.25")).setScale(0, java.math.RoundingMode.HALF_UP));
+                }
+            }
+        }
+    }
+
+    private boolean isBlank(String s) {
+        return s == null || s.isBlank();
     }
 
     private BigDecimal parsePriceToken(String num, String unit) {
