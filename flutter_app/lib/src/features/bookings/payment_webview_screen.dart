@@ -338,7 +338,7 @@ class _PaymentWebviewScreenState extends ConsumerState<PaymentWebviewScreen> {
               FilledButton.icon(
                 onPressed: _confirming ? null : _simulatePaid,
                 icon: const Icon(Icons.verified_rounded),
-                label: const Text('Tôi đã thanh toán (demo)'),
+                label: const Text('Tôi đã thanh toán'),
                 style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
               ),
             ],

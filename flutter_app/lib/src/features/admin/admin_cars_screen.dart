@@ -349,7 +349,7 @@ class _CarFormDialogState extends ConsumerState<_CarFormDialog> {
   late final TextEditingController _locationController;
   late final TextEditingController _seatsController;
 
-  String _transmission = 'AUTO';
+  String _transmission = 'AUTOMATIC';
   String _fuelType = 'GASOLINE';
   String _status = 'AVAILABLE';
   int? _branchId;
@@ -374,7 +374,7 @@ class _CarFormDialogState extends ConsumerState<_CarFormDialog> {
     );
     _locationController = TextEditingController(text: car?['location']?.toString() ?? '');
     _seatsController = TextEditingController(text: car?['seats']?.toString() ?? '');
-    _transmission = car?['transmission']?.toString() ?? 'AUTO';
+    _transmission = car?['transmission']?.toString() ?? 'AUTOMATIC';
     _fuelType = car?['fuelType']?.toString() ?? 'GASOLINE';
     _status = car?['status']?.toString() ?? 'AVAILABLE';
     _branchId = (car?['branchId'] as num?)?.toInt();
@@ -505,10 +505,10 @@ class _CarFormDialogState extends ConsumerState<_CarFormDialog> {
                   value: _transmission,
                   decoration: const InputDecoration(labelText: 'Hộp số'),
                   items: const [
-                    DropdownMenuItem(value: 'AUTO', child: Text('Tự động')),
+                    DropdownMenuItem(value: 'AUTOMATIC', child: Text('Tự động')),
                     DropdownMenuItem(value: 'MANUAL', child: Text('Số sàn')),
                   ],
-                  onChanged: (v) => setState(() => _transmission = v ?? 'AUTO'),
+                  onChanged: (v) => setState(() => _transmission = v ?? 'AUTOMATIC'),
                 ),
                 const SizedBox(height: AppSpacing.sm),
                 DropdownButtonFormField<String>(

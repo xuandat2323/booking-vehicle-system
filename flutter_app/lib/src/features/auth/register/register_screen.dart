@@ -60,7 +60,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
         onCodeSent: (verificationId) {
           if (mounted) {
             String msg = verificationId == "MOCK" 
-                ? 'Đã gửi mã xác thực OTP (Mock: 123456)' 
+                ? 'Đã gửi mã xác thực OTP'
                 : 'Đã gửi mã xác thực OTP qua Firebase';
             ToastUtils.showSuccess(context, msg);
             _startCountdown();
