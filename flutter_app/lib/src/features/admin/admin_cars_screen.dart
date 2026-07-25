@@ -23,9 +23,10 @@ final adminCarsProvider =
 });
 
 class AdminCarsScreen extends ConsumerStatefulWidget {
-  const AdminCarsScreen({super.key, this.initialStatus});
+  const AdminCarsScreen({super.key, this.initialStatus, this.initialBranchId});
 
   final String? initialStatus;
+  final String? initialBranchId;
 
   @override
   ConsumerState<AdminCarsScreen> createState() => _AdminCarsScreenState();
@@ -33,11 +34,14 @@ class AdminCarsScreen extends ConsumerStatefulWidget {
 
 class _AdminCarsScreenState extends ConsumerState<AdminCarsScreen> {
   late String _statusFilter;
+  int? _branchFilter;
 
+  /// BOOKED = đang có đơn thuê, PENDING = khách vừa đặt chờ cọc.
   static const _filters = [
     ('Tất cả', ''),
     ('Sẵn sàng', 'AVAILABLE'),
     ('Đang thuê', 'BOOKED'),
+    ('Chờ cọc', 'PENDING'),
     ('Bảo dưỡng', 'MAINTENANCE'),
   ];
 
@@ -45,6 +49,7 @@ class _AdminCarsScreenState extends ConsumerState<AdminCarsScreen> {
   void initState() {
     super.initState();
     _statusFilter = widget.initialStatus?.toUpperCase() ?? '';
+    _branchFilter = int.tryParse(widget.initialBranchId ?? '');
   }
 
   @override
@@ -90,17 +95,61 @@ class _AdminCarsScreenState extends ConsumerState<AdminCarsScreen> {
               },
             ),
           ),
+          ref.watch(branchListProvider).maybeWhen(
+                data: (branches) => Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.page,
+                    0,
+                    AppSpacing.page,
+                    AppSpacing.sm,
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.store_rounded, size: 18, color: cs.onSurfaceVariant),
+                      const SizedBox(width: AppSpacing.sm),
+                      Expanded(
+                        child: DropdownButtonHideUnderline(
+                          child: DropdownButton<int?>(
+                            value: _branchFilter,
+                            isExpanded: true,
+                            isDense: true,
+                            hint: const Text('Tất cả chi nhánh'),
+                            items: [
+                              const DropdownMenuItem<int?>(
+                                value: null,
+                                child: Text('Tất cả chi nhánh'),
+                              ),
+                              ...branches.map(
+                                (b) => DropdownMenuItem<int?>(
+                                  value: (b['branchId'] as num?)?.toInt(),
+                                  child: Text(
+                                    b['name']?.toString() ?? '',
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ),
+                            ],
+                            onChanged: (v) => setState(() => _branchFilter = v),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                orElse: () => const SizedBox.shrink(),
+              ),
           Expanded(
             child: RefreshIndicator(
               onRefresh: () async => ref.invalidate(adminCarsProvider),
               child: carsAsync.when(
                 data: (cars) {
-                  final filtered = _statusFilter.isEmpty
-                      ? cars
-                      : cars
-                          .where((c) =>
-                              (c['status']?.toString() ?? '') == _statusFilter)
-                          .toList();
+                  final filtered = cars.where((c) {
+                    final statusOk = _statusFilter.isEmpty ||
+                        (c['status']?.toString() ?? '') == _statusFilter;
+                    final branchOk = _branchFilter == null ||
+                        (c['branchId'] as num?)?.toInt() == _branchFilter;
+                    return statusOk && branchOk;
+                  }).toList();
                   if (filtered.isEmpty) {
                     return ListView(
                       physics: const AlwaysScrollableScrollPhysics(),
@@ -146,6 +195,8 @@ class _AdminCarsScreenState extends ConsumerState<AdminCarsScreen> {
                           car: car,
                           onEdit: () => _showCarForm(context, ref, car: car),
                           onDelete: () => _confirmDelete(context, ref, car),
+                          onChangeStatus: (status) =>
+                              _changeStatus(context, car, status),
                         ),
                       );
                     },
@@ -203,6 +254,33 @@ class _AdminCarsScreenState extends ConsumerState<AdminCarsScreen> {
       builder: (_) => _CarFormDialog(car: car),
     );
     if (saved == true) ref.invalidate(adminCarsProvider);
+  }
+
+  /// Đổi nhanh trạng thái xe (sẵn sàng <-> bảo dưỡng) mà không cần mở form sửa.
+  Future<void> _changeStatus(
+    BuildContext context,
+    Map<String, dynamic> car,
+    String status,
+  ) async {
+    final carName = carDisplayTitle(car['brand']?.toString(), car['name']?.toString());
+    try {
+      await ref.read(dioProvider).put(
+            '/api/admin/cars/${car['id']}',
+            data: {'status': status},
+          );
+      ref.invalidate(adminCarsProvider);
+      ref.invalidate(branchListProvider);
+      if (context.mounted) {
+        ToastUtils.showSuccess(
+          context,
+          status == 'MAINTENANCE'
+              ? 'Đã chuyển "$carName" sang bảo dưỡng'
+              : 'Đã đưa "$carName" về sẵn sàng cho thuê',
+        );
+      }
+    } catch (e) {
+      if (context.mounted) ToastUtils.showError(context, e);
+    }
   }
 
   Future<void> _confirmDelete(
@@ -273,8 +351,12 @@ class _CarFormDialogState extends ConsumerState<_CarFormDialog> {
 
   String _transmission = 'AUTO';
   String _fuelType = 'GASOLINE';
+  String _status = 'AVAILABLE';
   int? _branchId;
   bool _saving = false;
+
+  /// Chỉ cho đổi tay giữa 2 trạng thái này; BOOKED/PENDING do luồng đơn thuê quyết định.
+  static const _manualStatuses = ['AVAILABLE', 'MAINTENANCE'];
   final _priceFormatter = NumberFormat('#,###', 'vi_VN');
 
   @override
@@ -294,6 +376,7 @@ class _CarFormDialogState extends ConsumerState<_CarFormDialog> {
     _seatsController = TextEditingController(text: car?['seats']?.toString() ?? '');
     _transmission = car?['transmission']?.toString() ?? 'AUTO';
     _fuelType = car?['fuelType']?.toString() ?? 'GASOLINE';
+    _status = car?['status']?.toString() ?? 'AVAILABLE';
     _branchId = (car?['branchId'] as num?)?.toInt();
   }
 
@@ -337,6 +420,8 @@ class _CarFormDialogState extends ConsumerState<_CarFormDialog> {
       'fuelType': _fuelType,
       'location': _locationController.text.trim().isEmpty ? null : _locationController.text.trim(),
       'branchId': _branchId,
+      // API tạo xe nhận "carStatus", API sửa xe nhận "status".
+      if (widget.isEdit) 'status': _status else 'carStatus': _status,
     };
 
     try {
@@ -438,6 +523,23 @@ class _CarFormDialogState extends ConsumerState<_CarFormDialog> {
                   onChanged: (v) => setState(() => _fuelType = v ?? 'GASOLINE'),
                 ),
                 const SizedBox(height: AppSpacing.sm),
+                DropdownButtonFormField<String>(
+                  value: _manualStatuses.contains(_status) ? _status : null,
+                  decoration: InputDecoration(
+                    labelText: 'Trạng thái',
+                    helperText: _manualStatuses.contains(_status)
+                        ? null
+                        : 'Xe đang trong đơn thuê, không đổi tay được',
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: 'AVAILABLE', child: Text('Sẵn sàng cho thuê')),
+                    DropdownMenuItem(value: 'MAINTENANCE', child: Text('Bảo dưỡng')),
+                  ],
+                  onChanged: _manualStatuses.contains(_status)
+                      ? (v) => setState(() => _status = v ?? 'AVAILABLE')
+                      : null,
+                ),
+                const SizedBox(height: AppSpacing.sm),
                 TextFormField(
                   controller: _locationController,
                   decoration: const InputDecoration(labelText: 'Khu vực'),
@@ -491,11 +593,13 @@ class _CarCard extends StatelessWidget {
     required this.car,
     required this.onEdit,
     required this.onDelete,
+    required this.onChangeStatus,
   });
 
   final Map<String, dynamic> car;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
+  final ValueChanged<String> onChangeStatus;
 
   @override
   Widget build(BuildContext context) {
@@ -604,6 +708,26 @@ class _CarCard extends StatelessWidget {
                         Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
+                            if (status == 'AVAILABLE' || status == 'MAINTENANCE')
+                              IconButton(
+                                visualDensity: VisualDensity.compact,
+                                icon: Icon(
+                                  status == 'MAINTENANCE'
+                                      ? Icons.play_circle_outline_rounded
+                                      : Icons.build_outlined,
+                                  size: 20,
+                                  color: cs.secondary,
+                                ),
+                                onPressed: () => onChangeStatus(
+                                  status == 'MAINTENANCE' ? 'AVAILABLE' : 'MAINTENANCE',
+                                ),
+                                tooltip: status == 'MAINTENANCE'
+                                    ? 'Đưa về sẵn sàng cho thuê'
+                                    : 'Chuyển sang bảo dưỡng',
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints(),
+                              ),
+                            const SizedBox(width: AppSpacing.sm),
                             IconButton(
                               visualDensity: VisualDensity.compact,
                               icon: Icon(Icons.edit_outlined, size: 20, color: cs.primary),

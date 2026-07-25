@@ -90,6 +90,8 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
           cars: cars,
           suggestions: suggestions.isEmpty ? null : suggestions,
           relaxed: data['relaxed'] == true,
+          matchedCriteria: _stringList(data['matchedCriteria']),
+          unmatchedCriteria: _stringList(data['unmatchedCriteria']),
         ));
         _isLoading = false;
       });
@@ -107,6 +109,11 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
       });
     }
     _scrollToBottom();
+  }
+
+  List<String> _stringList(Object? raw) {
+    if (raw is! List) return const [];
+    return raw.map((e) => e.toString()).where((e) => e.isNotEmpty).toList();
   }
 
   @override
@@ -257,22 +264,19 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      if (message.relaxed == true) ...[
-                        Container(
-                          margin: const EdgeInsets.only(bottom: 8),
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: cs.secondaryContainer.withValues(alpha: 0.5),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Text(
-                            'Đã nới tiêu chí để gần đúng hơn',
-                            style: tt.labelSmall?.copyWith(
-                              color: cs.onSecondaryContainer,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
+                      if (message.matchedCriteria.isNotEmpty ||
+                          message.unmatchedCriteria.isNotEmpty) ...[
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 6,
+                          children: [
+                            for (final c in message.matchedCriteria)
+                              _CriteriaTag(label: c, matched: true),
+                            for (final c in message.unmatchedCriteria)
+                              _CriteriaTag(label: c, matched: false),
+                          ],
                         ),
+                        const SizedBox(height: 10),
                       ],
                       Text(
                         message.text,
@@ -470,12 +474,57 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
   }
 }
 
+/// Cho khách thấy bot hiểu đúng tiêu chí nào, và tiêu chí nào không có xe khớp.
+class _CriteriaTag extends StatelessWidget {
+  const _CriteriaTag({required this.label, required this.matched});
+
+  final String label;
+  final bool matched;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+    final color = matched ? cs.primary : cs.error;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withValues(alpha: 0.35)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            matched ? Icons.check_rounded : Icons.remove_circle_outline_rounded,
+            size: 13,
+            color: color,
+          ),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: tt.labelSmall?.copyWith(
+              color: color,
+              fontWeight: FontWeight.w600,
+              decoration: matched ? null : TextDecoration.lineThrough,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _ChatMessage {
   final String text;
   final bool isBot;
   final List<Map<String, dynamic>>? cars;
   final List<String>? suggestions;
   final bool? relaxed;
+  final List<String> matchedCriteria;
+  final List<String> unmatchedCriteria;
 
   _ChatMessage({
     required this.text,
@@ -483,6 +532,8 @@ class _ChatMessage {
     this.cars,
     this.suggestions,
     this.relaxed,
+    this.matchedCriteria = const [],
+    this.unmatchedCriteria = const [],
   });
 }
 

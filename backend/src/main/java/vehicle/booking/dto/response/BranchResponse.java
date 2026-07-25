@@ -20,4 +20,8 @@ public class BranchResponse {
     private BigDecimal longitude;
     private Boolean isActive;
     private Long availableCarCount;
+    /// Xe đang có khách thuê (BOOKED) hoặc vừa được đặt chờ cọc (PENDING).
+    private Long rentedCarCount;
+    private Long maintenanceCarCount;
+    private Long totalCarCount;
 }

@@ -9,7 +9,8 @@ import '../../core/theme/app_spacing.dart';
 import '../../core/widgets/app_ui.dart';
 import '../cars/car_list_screen.dart';
 
-final invoiceListProvider = FutureProvider<List<Map<String, dynamic>>>((ref) async {
+final invoiceListProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
   final dio = ref.read(dioProvider);
   final response = await dio.get('/api/invoices/my-invoices', queryParameters: {'page': 0, 'size': 50});
   final data = response.data['data'] as Map<String, dynamic>;

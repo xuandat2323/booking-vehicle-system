@@ -90,6 +90,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                   path: 'cars',
                   builder: (c, s) => AdminCarsScreen(
                     initialStatus: s.uri.queryParameters['status'],
+                    initialBranchId: s.uri.queryParameters['branchId'],
                   ),
                 ),
                 GoRoute(path: 'bookings', builder: (c, s) => const AdminBookingsScreen()),

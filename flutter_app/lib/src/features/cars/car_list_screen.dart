@@ -512,6 +512,56 @@ class _CarListScreenState extends ConsumerState<CarListScreen> {
               ],
             ),
           ),
+          if (params.branchId != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.page,
+                0,
+                AppSpacing.page,
+                AppSpacing.sm,
+              ),
+              child: Material(
+                color: cs.primaryContainer.withValues(alpha: 0.18),
+                borderRadius: BorderRadius.circular(AppTheme.radiusCard),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.md,
+                    AppSpacing.sm,
+                    AppSpacing.sm,
+                    AppSpacing.sm,
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.store_rounded, size: 18, color: cs.primary),
+                      const SizedBox(width: AppSpacing.sm),
+                      Expanded(
+                        child: Text(
+                          'Đang xem xe tại ${branchesAsync.valueOrNull?.firstWhere(
+                                (b) => (b['branchId'] as num?)?.toInt() == params.branchId,
+                                orElse: () => const <String, dynamic>{},
+                              )['name'] ?? 'chi nhánh đã chọn'}',
+                          style: tt.bodySmall?.copyWith(
+                            color: cs.primary,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      TextButton.icon(
+                        onPressed: () => _setBranchFilter(null),
+                        icon: const Icon(Icons.close_rounded, size: 16),
+                        label: const Text('Xem tất cả xe'),
+                        style: TextButton.styleFrom(
+                          visualDensity: VisualDensity.compact,
+                          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
           if (isNearbyMode)
             AppSurface(
               color: cs.primaryContainer.withValues(alpha: 0.08),

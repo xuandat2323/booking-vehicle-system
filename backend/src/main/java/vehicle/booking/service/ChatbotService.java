@@ -57,22 +57,26 @@ public class ChatbotService {
 
             SearchOutcome outcome = searchWithRelaxation(filters);
             List<CarSummaryResponse> cars = outcome.cars();
+            List<String> matchedLabels = describeCriteria(outcome.keptKeys(), filters);
+            List<String> unmatchedLabels = describeCriteria(outcome.droppedKeys(), filters);
+
             result.put("cars", cars);
             result.put("totalFound", cars.size());
             result.put("relaxed", outcome.relaxed());
+            result.put("matchedCriteria", matchedLabels);
+            result.put("unmatchedCriteria", unmatchedLabels);
             result.put("suggestions", buildSuggestions(filters, cars));
 
-            String answer;
-            if (geminiService.isAvailable() && !cars.isEmpty()) {
+            // Khi phải nới tiêu chí thì tự viết câu trả lời để không nói quá về độ khớp.
+            String answer = null;
+            if (geminiService.isAvailable() && !cars.isEmpty() && !outcome.relaxed()) {
                 String carsJson = objectMapper.writeValueAsString(
                         cars.stream().limit(5).map(this::carBrief).toList()
                 );
-                answer = geminiService.formatResponse(q, carsJson, cars.size());
-                if (answer == null || answer.isBlank()) {
-                    answer = buildFallbackAnswer(q, cars, outcome.relaxed());
-                }
-            } else {
-                answer = buildFallbackAnswer(q, cars, outcome.relaxed());
+                answer = geminiService.formatResponse(q, carsJson, cars.size(), matchedLabels);
+            }
+            if (answer == null || answer.isBlank()) {
+                answer = buildFallbackAnswer(cars, matchedLabels, unmatchedLabels);
             }
             result.put("answer", stripMarkdownNoise(answer));
 
@@ -312,58 +316,204 @@ public class ChatbotService {
         }
     }
 
-    private record SearchOutcome(List<CarSummaryResponse> cars, boolean relaxed) {}
+    private record SearchOutcome(
+            List<CarSummaryResponse> cars,
+            List<String> keptKeys,
+            List<String> droppedKeys
+    ) {
+        boolean relaxed() {
+            return !droppedKeys.isEmpty();
+        }
+    }
 
+    /** Nhóm giá phải bỏ cùng nhau, nếu không "từ 1tr đến 2tr" bị lệch một đầu. */
+    private static final List<String> PRICE_GROUP = List.of("minPrice", "maxPrice");
+
+    /**
+     * Thứ tự ưu tiên GIỮ tiêu chí: hãng và mẫu xe là ý định rõ nhất của khách,
+     * khu vực dễ thay thế nhất nên bỏ trước.
+     */
+    private static final List<String> DROP_PRIORITY =
+            List.of("location", "transmission", "fuelType", "price", "seats", "name", "brand");
+
+    private static final int MAX_SEARCH_ATTEMPTS = 24;
+
+    /**
+     * Tìm theo AND đầy đủ trước. Nếu không có xe nào khớp hết thì bỏ CÀNG ÍT tiêu chí
+     * càng tốt (thử bỏ 1 tiêu chí, rồi 2, …) để kết quả vẫn thỏa nhiều tiêu chí nhất,
+     * và trả về đúng những tiêu chí đã phải bỏ để trả lời trung thực với khách.
+     */
     private SearchOutcome searchWithRelaxation(Map<String, Object> filters) {
+        List<String> active = activeCriteria(filters);
+
         List<CarSummaryResponse> cars = searchCarsWithFilters(filters);
         if (!cars.isEmpty()) {
-            return new SearchOutcome(sortCars(cars, filters), false);
+            return new SearchOutcome(sortCars(cars, filters), active, List.of());
+        }
+        if (active.isEmpty()) {
+            return new SearchOutcome(sortCars(searchCarsWithFilters(Map.of()), filters), List.of(), List.of());
         }
 
-        // Nới dần: name → location → fuel/transmission → seats → price band
-        List<String> dropOrder = List.of("name", "location", "fuelType", "transmission", "seats", "minPrice", "maxPrice", "brand");
-        Map<String, Object> relaxed = new LinkedHashMap<>(filters);
-        for (String key : dropOrder) {
-            if (!relaxed.containsKey(key)) continue;
-            relaxed.remove(key);
-            cars = searchCarsWithFilters(relaxed);
-            if (!cars.isEmpty()) {
-                return new SearchOutcome(sortCars(cars, filters), true);
+        int attempts = 1;
+        for (int dropCount = 1; dropCount < active.size(); dropCount++) {
+            for (List<String> combo : combinations(active, dropCount)) {
+                if (attempts++ > MAX_SEARCH_ATTEMPTS) break;
+
+                Map<String, Object> relaxed = withoutCriteria(filters, combo);
+                List<CarSummaryResponse> found = searchCarsWithFilters(relaxed);
+                if (!found.isEmpty()) {
+                    List<String> kept = active.stream().filter(k -> !combo.contains(k)).toList();
+                    return new SearchOutcome(sortCars(found, filters), kept, combo);
+                }
             }
         }
 
-        // Cuối cùng: mọi xe available
-        cars = searchCarsWithFilters(Collections.emptyMap());
-        return new SearchOutcome(sortCars(cars, filters), true);
+        // Không tiêu chí nào cho ra kết quả — gợi ý xe đang sẵn sàng
+        return new SearchOutcome(sortCars(searchCarsWithFilters(Map.of()), filters), List.of(), active);
+    }
+
+    private List<String> activeCriteria(Map<String, Object> filters) {
+        return DROP_PRIORITY.stream()
+                .filter(key -> "price".equals(key)
+                        ? PRICE_GROUP.stream().anyMatch(filters::containsKey)
+                        : filters.containsKey(key))
+                .toList();
+    }
+
+    private Map<String, Object> withoutCriteria(Map<String, Object> filters, List<String> criteria) {
+        Map<String, Object> copy = new LinkedHashMap<>(filters);
+        for (String key : criteria) {
+            if ("price".equals(key)) {
+                PRICE_GROUP.forEach(copy::remove);
+            } else {
+                copy.remove(key);
+            }
+        }
+        return copy;
+    }
+
+    /** Tổ hợp theo đúng thứ tự DROP_PRIORITY: tiêu chí dễ bỏ được thử bỏ trước. */
+    private List<List<String>> combinations(List<String> source, int size) {
+        List<List<String>> out = new ArrayList<>();
+        buildCombinations(source, size, 0, new ArrayList<>(), out);
+        return out;
+    }
+
+    private void buildCombinations(List<String> source, int size, int start,
+                                   List<String> current, List<List<String>> out) {
+        if (current.size() == size) {
+            out.add(List.copyOf(current));
+            return;
+        }
+        for (int i = start; i < source.size(); i++) {
+            current.add(source.get(i));
+            buildCombinations(source, size, i + 1, current, out);
+            current.remove(current.size() - 1);
+        }
+    }
+
+    /** Mô tả tiêu chí bằng tiếng Việt để hiển thị / giải thích cho khách. */
+    private String describeCriterion(String key, Map<String, Object> filters) {
+        return switch (key) {
+            case "brand" -> "hãng " + filters.get("brand");
+            case "name" -> "mẫu " + filters.get("name");
+            case "seats" -> describeSeats(filters.get("seats"));
+            case "location" -> "chi nhánh " + filters.get("location");
+            case "transmission" -> "MANUAL".equals(Objects.toString(filters.get("transmission"), ""))
+                    ? "số sàn" : "số tự động";
+            case "fuelType" -> switch (Objects.toString(filters.get("fuelType"), "")) {
+                case "ELECTRIC" -> "xe điện";
+                case "HYBRID" -> "xe hybrid";
+                case "DIESEL" -> "máy dầu";
+                default -> "xe xăng";
+            };
+            case "price" -> describePrice(filters);
+            default -> key;
+        };
+    }
+
+    private String describeSeats(Object seats) {
+        List<String> values = new ArrayList<>();
+        if (seats instanceof List<?> list) {
+            list.forEach(s -> values.add(s.toString()));
+        } else if (seats != null) {
+            values.add(seats.toString());
+        }
+        return values.isEmpty() ? "số chỗ" : String.join("/", values) + " chỗ";
+    }
+
+    private String describePrice(Map<String, Object> filters) {
+        Object min = filters.get("minPrice");
+        Object max = filters.get("maxPrice");
+        if (min != null && max != null) {
+            return String.format("giá %s–%s đ/ngày", compactPrice(min), compactPrice(max));
+        }
+        if (max != null) return "giá dưới " + compactPrice(max) + " đ/ngày";
+        if (min != null) return "giá từ " + compactPrice(min) + " đ/ngày";
+        return "khoảng giá";
+    }
+
+    private String compactPrice(Object value) {
+        try {
+            double v = new BigDecimal(value.toString()).doubleValue();
+            if (v >= 1_000_000) {
+                double tr = v / 1_000_000d;
+                return (tr == Math.floor(tr) ? String.format("%.0f", tr) : String.format("%.1f", tr)) + "tr";
+            }
+            if (v >= 1_000) {
+                double k = v / 1_000d;
+                return (k == Math.floor(k) ? String.format("%.0f", k) : String.format("%.1f", k)) + "k";
+            }
+            return String.format("%,.0f", v);
+        } catch (Exception e) {
+            return Objects.toString(value, "");
+        }
+    }
+
+    private List<String> describeCriteria(List<String> keys, Map<String, Object> filters) {
+        return keys.stream().map(k -> describeCriterion(k, filters)).toList();
     }
 
     private List<CarSummaryResponse> sortCars(List<CarSummaryResponse> cars, Map<String, Object> filters) {
         String sort = Objects.toString(filters.get("sort"), "");
-        Comparator<CarSummaryResponse> cmp = Comparator.comparing(
+        Comparator<CarSummaryResponse> byPrice = Comparator.comparing(
                 c -> c.pricePerDay() == null ? BigDecimal.ZERO : c.pricePerDay());
-        if ("priceDesc".equals(sort)) {
-            return cars.stream().sorted(cmp.reversed()).collect(Collectors.toList());
-        }
-        if ("priceAsc".equals(sort) || filters.containsKey("maxPrice")) {
-            return cars.stream().sorted(cmp).collect(Collectors.toList());
-        }
-        // Ưu tiên đúng brand/name nếu có
-        String brand = Objects.toString(filters.get("brand"), "").toLowerCase(Locale.ROOT);
-        String name = Objects.toString(filters.get("name"), "").toLowerCase(Locale.ROOT);
-        return cars.stream().sorted((a, b) -> {
-            int sa = score(a, brand, name);
-            int sb = score(b, brand, name);
-            if (sa != sb) return Integer.compare(sb, sa);
-            return cmp.compare(a, b);
-        }).collect(Collectors.toList());
+        Comparator<CarSummaryResponse> tieBreak =
+                "priceDesc".equals(sort) ? byPrice.reversed() : byPrice;
+
+        // Xe khớp nhiều tiêu chí gốc nhất luôn lên đầu, kể cả khi đã phải nới filter.
+        return cars.stream()
+                .sorted(Comparator.comparingInt((CarSummaryResponse c) -> -score(c, filters))
+                        .thenComparing(tieBreak))
+                .collect(Collectors.toList());
     }
 
-    private int score(CarSummaryResponse c, String brand, String name) {
+    private int score(CarSummaryResponse c, Map<String, Object> filters) {
         int s = 0;
-        String b = Objects.toString(c.brand(), "").toLowerCase(Locale.ROOT);
-        String n = Objects.toString(c.name(), "").toLowerCase(Locale.ROOT);
-        if (!brand.isEmpty() && b.contains(brand.toLowerCase(Locale.ROOT))) s += 5;
-        if (!name.isEmpty() && (n.contains(name) || name.contains(n))) s += 8;
+        String brand = normalize(Objects.toString(filters.get("brand"), ""));
+        String name = normalize(Objects.toString(filters.get("name"), ""));
+        String location = normalize(Objects.toString(filters.get("location"), ""));
+
+        String carBrand = normalize(Objects.toString(c.brand(), ""));
+        String carName = normalize(Objects.toString(c.name(), ""));
+        String carPlace = normalize(Objects.toString(c.branchName(), "") + " " + Objects.toString(c.location(), ""));
+
+        if (!name.isEmpty() && (carName.contains(name) || name.contains(carName))) s += 8;
+        if (!brand.isEmpty() && carBrand.contains(brand)) s += 6;
+        if (!location.isEmpty() && carPlace.contains(location)) s += 4;
+
+        Object seats = filters.get("seats");
+        if (seats instanceof List<?> list && c.seats() != null
+                && list.stream().anyMatch(v -> v instanceof Number n && n.intValue() == c.seats())) {
+            s += 5;
+        }
+
+        if (c.pricePerDay() != null) {
+            Object max = filters.get("maxPrice");
+            Object min = filters.get("minPrice");
+            if (max != null && c.pricePerDay().compareTo(new BigDecimal(max.toString())) <= 0) s += 3;
+            if (min != null && c.pricePerDay().compareTo(new BigDecimal(min.toString())) >= 0) s += 3;
+        }
         return s;
     }
 
@@ -434,17 +584,28 @@ public class ChatbotService {
         return tips.stream().limit(4).toList();
     }
 
-    private String buildFallbackAnswer(String question, List<CarSummaryResponse> cars, boolean relaxed) {
+    private String buildFallbackAnswer(List<CarSummaryResponse> cars,
+                                       List<String> matched,
+                                       List<String> unmatched) {
         if (cars.isEmpty()) {
-            return "Chưa thấy xe khớp yêu cầu.\n"
+            return "Chưa thấy xe nào khớp yêu cầu.\n"
                     + "Thử: đổi khoảng giá, bỏ hãng cụ thể, hoặc chọn chi nhánh Hoàn Kiếm / Cầu Giấy / Thanh Xuân.";
         }
 
         StringBuilder sb = new StringBuilder();
-        if (relaxed) {
-            sb.append("Mình nới nhẹ tiêu chí để tìm gần đúng hơn — đây là các lựa chọn phù hợp:\n\n");
+        if (!unmatched.isEmpty()) {
+            sb.append(String.format("Hiện không có xe nào thoả cả %s.\n",
+                    joinLabels(concat(matched, unmatched))));
+            if (matched.isEmpty()) {
+                sb.append("Mình gợi ý vài xe đang sẵn sàng:\n\n");
+            } else {
+                sb.append(String.format("Mình giữ %s và bỏ %s, được các xe sau:\n\n",
+                        joinLabels(matched), joinLabels(unmatched)));
+            }
+        } else if (matched.isEmpty()) {
+            sb.append(String.format("Có %d xe đang sẵn sàng cho thuê:\n\n", cars.size()));
         } else {
-            sb.append(String.format("Tìm thấy %d xe phù hợp:\n\n", cars.size()));
+            sb.append(String.format("Tìm thấy %d xe thoả %s:\n\n", cars.size(), joinLabels(matched)));
         }
         int limit = Math.min(cars.size(), 3);
         for (int i = 0; i < limit; i++) {
@@ -463,6 +624,19 @@ public class ChatbotService {
             sb.append("\nChạm thẻ xe bên dưới để xem chi tiết và đặt.");
         }
         return sb.toString();
+    }
+
+    private List<String> concat(List<String> a, List<String> b) {
+        List<String> out = new ArrayList<>(a);
+        out.addAll(b);
+        return out;
+    }
+
+    private String joinLabels(List<String> labels) {
+        if (labels.isEmpty()) return "";
+        if (labels.size() == 1) return labels.get(0);
+        return String.join(", ", labels.subList(0, labels.size() - 1))
+                + " và " + labels.get(labels.size() - 1);
     }
 
     private static String stripMarkdownNoise(String text) {

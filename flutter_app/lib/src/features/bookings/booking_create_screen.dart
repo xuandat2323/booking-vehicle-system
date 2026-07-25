@@ -6,6 +6,9 @@ import '../../core/network/dio_provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../booking/branch_location_picker.dart';
 import '../booking/location_picker_dialog.dart';
+import '../cars/car_list_screen.dart';
+import '../invoices/invoice_list_screen.dart';
+import 'booking_history_screen.dart';
 
 class BookingCreateScreen extends ConsumerStatefulWidget {
   const BookingCreateScreen({super.key, required this.carId});
@@ -108,12 +111,16 @@ class _BookingCreateScreenState extends ConsumerState<BookingCreateScreen> {
       final bookingData = bookingResponse.data['data'];
       final bookingId = bookingData['bookingId'];
 
+      // Đơn + hoá đơn đã tồn tại ngay khi tạo booking, nên refresh trước khi rời màn
+      _refreshUserData();
+
       // PayOS deposit payment
       final paymentUrlResponse = await dio.post('/api/payments/payos/create/$bookingId');
       final paymentData = Map<String, dynamic>.from(paymentUrlResponse.data['data'] as Map);
 
       if (mounted) {
         final success = await context.push<bool>('/payment-webview', extra: paymentData);
+        _refreshUserData();
         if (mounted) {
           if (success == true) {
             ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Đã đặt cọc giữ xe thành công! 🎉')));
@@ -133,6 +140,14 @@ class _BookingCreateScreenState extends ConsumerState<BookingCreateScreen> {
     } finally {
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+  /// Tab "Chuyến đi" / "Hoá đơn" nằm trong shell nên luôn mounted và giữ cache cũ.
+  /// Phải invalidate thủ công, nếu không danh sách trống tới khi kill app.
+  void _refreshUserData() {
+    ref.invalidate(bookingHistoryProvider);
+    ref.invalidate(invoiceListProvider);
+    ref.invalidate(carListProvider);
   }
 
   @override

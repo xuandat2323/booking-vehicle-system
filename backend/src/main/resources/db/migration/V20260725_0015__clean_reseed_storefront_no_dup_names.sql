@@ -110,11 +110,11 @@ SELECT c.car_id,
     CASE c.license_plate
         WHEN '30K-123.45' THEN 'https://images.unsplash.com/photo-1617469767053-d3b523a0b982?w=800'
         WHEN '30E-888.99' THEN 'https://images.unsplash.com/photo-1618843479313-40f8afb4b4d8?w=800'
-        WHEN '30E-777.11' THEN 'https://images.unsplash.com/photo-1617814076367-b759aad2c0e0?w=800'
+        WHEN '30E-777.11' THEN 'https://images.unsplash.com/photo-1563720223185-11003d516935?w=800'
         WHEN '30F-999.11' THEN 'https://images.unsplash.com/photo-1606664515524-ed2f786a0bd6?w=800'
         WHEN '30C-222.44' THEN 'https://images.unsplash.com/photo-1568605117036-5fe5e7bab0b7?w=800'
         WHEN '43A-555.55' THEN 'https://images.unsplash.com/photo-1533473359331-0135ef1b58bf?w=800'
-        WHEN '30H-456.78' THEN 'https://images.unsplash.com/photo-1619976215249-a9dfe3d09240?w=800'
+        WHEN '30H-456.78' THEN 'https://images.unsplash.com/photo-1590362891991-f776e747a588?w=800'
         WHEN '29A-234.56' THEN 'https://images.unsplash.com/photo-1517994112540-009c47ea476b?w=800'
         WHEN '30K-999.88' THEN 'https://images.unsplash.com/photo-1593941707882-a5bba14938c7?w=800'
         WHEN '30K-111.22' THEN 'https://images.unsplash.com/photo-1617104678098-de229db51175?w=800'

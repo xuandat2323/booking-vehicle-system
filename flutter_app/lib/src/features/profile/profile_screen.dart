@@ -35,6 +35,8 @@ class ProfileScreen extends ConsumerWidget {
           final license = user['driveLicense'] ?? 'Chưa cập nhật';
           final role = user['role'] ?? 'USER';
           final initial = name.isNotEmpty ? name[0].toUpperCase() : 'U';
+          // Admin không thuê xe nên không cần eKYC.
+          final isAdmin = role.toString().toUpperCase() == 'ADMIN';
 
           return RefreshIndicator(
             onRefresh: () => ref.refresh(userProfileProvider.future),
@@ -129,7 +131,8 @@ class ProfileScreen extends ConsumerWidget {
                           ),
                           const SizedBox(height: AppSpacing.section),
 
-                          FadeSlideIn(
+                          if (!isAdmin)
+                            FadeSlideIn(
                             delay: const Duration(milliseconds: 80),
                             child: AppSurface(
                               onTap: () => context.push('/verification'),
@@ -170,7 +173,7 @@ class ProfileScreen extends ConsumerWidget {
                             ),
                           ),
 
-                          if (role.toUpperCase() == 'ADMIN') ...[
+                          if (isAdmin) ...[
                             const SizedBox(height: AppSpacing.lg),
                             FadeSlideIn(
                               delay: const Duration(milliseconds: 120),

@@ -135,18 +135,28 @@ public class GeminiService {
         return generateContent(systemPrompt, userQuestion);
     }
 
-    public String formatResponse(String userQuestion, String carsJson, int totalFound) {
+    /**
+     * @param matchedCriteria các tiêu chí mà TẤT CẢ xe trong JSON đều thoả — nêu lại để khách
+     *                        thấy bot hiểu đúng yêu cầu, và tuyệt đối không nói quá về độ khớp.
+     */
+    public String formatResponse(String userQuestion, String carsJson, int totalFound,
+                                 List<String> matchedCriteria) {
         String systemPrompt = """
             Bạn là trợ lý GoRento. Trả lời tiếng Việt, ngắn (tối đa 80 từ), thân thiện, không markdown đậm.
             - Chỉ dùng xe trong dữ liệu JSON.
+            - Xác nhận lại ngắn gọn các tiêu chí khách yêu cầu, vì mọi xe trong JSON đều thoả ĐỦ các tiêu chí đó.
             - Nêu 1–3 xe: tên đầy đủ (hãng + tên), giá đ/ngày, chi nhánh nếu có.
             - Kết thúc bằng lời mời chạm thẻ xe bên dưới để đặt.
             - Không bịa thông tin. Không liệt kê quá 3 xe trong text.
             """;
 
+        String criteria = matchedCriteria == null || matchedCriteria.isEmpty()
+                ? "(không có tiêu chí cụ thể)"
+                : String.join(", ", matchedCriteria);
+
         String userMsg = String.format(
-                "Câu hỏi: \"%s\"\nSố xe tìm thấy: %d\nJSON xe:\n%s",
-                userQuestion, totalFound, carsJson
+                "Câu hỏi: \"%s\"\nTiêu chí mọi xe đều thoả: %s\nSố xe tìm thấy: %d\nJSON xe:\n%s",
+                userQuestion, criteria, totalFound, carsJson
         );
 
         return generatePlainText(systemPrompt, userMsg);

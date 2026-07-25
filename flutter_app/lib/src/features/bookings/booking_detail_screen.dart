@@ -5,6 +5,8 @@ import 'package:go_router/go_router.dart';
 import '../../core/network/dio_provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../cars/car_list_screen.dart';
+import '../invoices/invoice_list_screen.dart';
+import 'booking_history_screen.dart';
 import 'payment_webview_screen.dart';
 import 'review_dialog.dart';
 
@@ -31,11 +33,20 @@ class BookingDetailScreen extends ConsumerWidget {
 
   final String bookingId;
 
+  /// Danh sách chuyến đi / hoá đơn nằm trong shell tab nên không tự refetch,
+  /// phải invalidate sau mỗi hành động thay đổi trạng thái đơn.
+  void _refreshLists(WidgetRef ref) {
+    ref.invalidate(bookingDetailProvider(bookingId));
+    ref.invalidate(bookingHistoryProvider);
+    ref.invalidate(invoiceListProvider);
+    ref.invalidate(carListProvider);
+  }
+
   Future<void> _cancel(BuildContext context, WidgetRef ref) async {
     try {
       final dio = ref.read(dioProvider);
       await dio.put('/api/bookings/$bookingId/cancel');
-      ref.invalidate(bookingDetailProvider(bookingId));
+      _refreshLists(ref);
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Đã hủy chuyến đi')));
       }
@@ -64,7 +75,7 @@ class BookingDetailScreen extends ConsumerWidget {
         );
 
         if (success == true) {
-          ref.invalidate(bookingDetailProvider(bookingId));
+          _refreshLists(ref);
           if (context.mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(content: Text('Thanh toán thành công!')),
@@ -91,7 +102,7 @@ class BookingDetailScreen extends ConsumerWidget {
     try {
       final dio = ref.read(dioProvider);
       await dio.put('/api/bookings/$bookingId/return');
-      ref.invalidate(bookingDetailProvider(bookingId));
+      _refreshLists(ref);
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Gửi yêu cầu trả xe thành công!')),

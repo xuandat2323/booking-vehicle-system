@@ -10,7 +10,8 @@ import '../../core/theme/app_theme.dart';
 import '../../core/widgets/app_ui.dart';
 import '../cars/car_list_screen.dart';
 
-final bookingHistoryProvider = FutureProvider<List<Map<String, dynamic>>>((ref) async {
+final bookingHistoryProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
   final dio = ref.read(dioProvider);
   final response = await dio.get('/api/bookings/my-bookings', queryParameters: {'page': 0, 'size': 50});
   final data = response.data['data'] as Map<String, dynamic>;

@@ -5,6 +5,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import vehicle.booking.dto.response.BranchResponse;
 import vehicle.booking.entity.Branch;
+import vehicle.booking.entity.Car;
 import vehicle.booking.entity.enums.CarStatus;
 import vehicle.booking.exception.AppException;
 import vehicle.booking.exception.ErrorCode;
@@ -76,11 +77,15 @@ public class BranchServiceImpl implements BranchService {
     }
 
     private BranchResponse mapToResponse(Branch branch) {
-        long availableCount = branch.getCars() != null
-                ? branch.getCars().stream()
-                    .filter(car -> car.getStatus() == CarStatus.AVAILABLE)
-                    .count()
-                : 0L;
+        List<Car> cars = branch.getCars() != null ? branch.getCars() : List.of();
+
+        long availableCount = countByStatus(cars, CarStatus.AVAILABLE);
+        long rentedCount = countByStatus(cars, CarStatus.BOOKED) + countByStatus(cars, CarStatus.PENDING);
+        long maintenanceCount = countByStatus(cars, CarStatus.MAINTENANCE);
+        long totalCount = cars.stream()
+                .filter(car -> car.getStatus() != CarStatus.DISABLED)
+                .count();
+
         return BranchResponse.builder()
                 .branchId(branch.getBranchId())
                 .name(branch.getName())
@@ -90,6 +95,13 @@ public class BranchServiceImpl implements BranchService {
                 .longitude(branch.getLongitude())
                 .isActive(branch.getIsActive())
                 .availableCarCount(availableCount)
+                .rentedCarCount(rentedCount)
+                .maintenanceCarCount(maintenanceCount)
+                .totalCarCount(totalCount)
                 .build();
+    }
+
+    private long countByStatus(List<Car> cars, CarStatus status) {
+        return cars.stream().filter(car -> car.getStatus() == status).count();
     }
 }
