@@ -38,6 +38,8 @@ dependencies {
 
 	implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.3.0'
 	implementation 'com.cloudinary:cloudinary-http44:1.39.0'
+	implementation 'vn.payos:payos-java:2.0.1'
+	implementation 'me.paulschwarz:spring-dotenv:4.0.0'
 	implementation 'com.twilio.sdk:twilio:10.6.10'
 	implementation 'com.google.firebase:firebase-admin:9.4.3'
 
@@ -62,4 +64,3 @@ dependencies {
 tasks.named('test') {
 	useJUnitPlatform()
 }
-

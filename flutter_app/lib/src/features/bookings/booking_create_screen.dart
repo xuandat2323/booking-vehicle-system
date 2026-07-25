@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/network/dio_provider.dart';
 import '../../core/theme/app_theme.dart';
+import '../booking/branch_location_picker.dart';
 import '../booking/location_picker_dialog.dart';
 
 class BookingCreateScreen extends ConsumerStatefulWidget {
@@ -22,6 +23,34 @@ class _BookingCreateScreenState extends ConsumerState<BookingCreateScreen> {
 
   PickedLocation? _pickupLocation;
   PickedLocation? _dropoffLocation;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadCarBranchDefault();
+  }
+
+  Future<void> _loadCarBranchDefault() async {
+    try {
+      final dio = ref.read(dioProvider);
+      final resp = await dio.get('/api/cars/${widget.carId}');
+      final car = resp.data['data'] as Map<String, dynamic>?;
+      if (car == null || !mounted) return;
+      final loc = car['location']?.toString() ?? '';
+      final lat = (car['latitude'] as num?)?.toDouble();
+      final lng = (car['longitude'] as num?)?.toDouble();
+      final branchName = car['branchName']?.toString();
+      if (lat != null && lng != null && loc.isNotEmpty) {
+        final address = branchName != null && branchName.isNotEmpty
+            ? '$branchName — $loc'
+            : loc;
+        setState(() {
+          _pickupLocation = PickedLocation(address: address, lat: lat, lng: lng);
+          _dropoffLocation = PickedLocation(address: address, lat: lat, lng: lng);
+        });
+      }
+    } catch (_) {}
+  }
 
 
   Future<void> _pickDates() async {
@@ -288,7 +317,7 @@ class _BookingCreateScreenState extends ConsumerState<BookingCreateScreen> {
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              'Nhấn để chọn trực tiếp trên bản đồ',
+                              'Chọn chi nhánh nhận / trả xe (3 cơ sở GoRento)',
                               style: tt.bodyMedium,
                             ),
                             const SizedBox(height: 20),
@@ -298,11 +327,10 @@ class _BookingCreateScreenState extends ConsumerState<BookingCreateScreen> {
                               address: _pickupLocation?.address,
                               color: cs.secondaryContainer,
                               onTap: () async {
-                                final result = await LocationPickerDialog.show(
+                                final result = await BranchLocationPicker.show(
                                   context,
-                                  title: 'Chọn điểm đón',
+                                  title: 'Chọn chi nhánh đón xe',
                                   initialLocation: _pickupLocation,
-                                  accentColor: cs.secondaryContainer,
                                 );
                                 if (result != null) setState(() => _pickupLocation = result);
                               },
@@ -314,11 +342,10 @@ class _BookingCreateScreenState extends ConsumerState<BookingCreateScreen> {
                               address: _dropoffLocation?.address,
                               color: cs.tertiary,
                               onTap: () async {
-                                final result = await LocationPickerDialog.show(
+                                final result = await BranchLocationPicker.show(
                                   context,
-                                  title: 'Chọn điểm trả',
+                                  title: 'Chọn chi nhánh trả xe',
                                   initialLocation: _dropoffLocation,
-                                  accentColor: cs.tertiary,
                                 );
                                 if (result != null) setState(() => _dropoffLocation = result);
                               },

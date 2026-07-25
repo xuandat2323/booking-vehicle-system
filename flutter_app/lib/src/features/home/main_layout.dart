@@ -45,6 +45,7 @@ class MainLayout extends ConsumerWidget {
       floatingActionButton: isAdmin
           ? null
           : FloatingActionButton(
+              heroTag: 'gorento_chatbot_fab',
               onPressed: () => context.push('/chatbot'),
               tooltip: 'Trợ lý GoRento',
               child: const Icon(Icons.smart_toy_rounded),

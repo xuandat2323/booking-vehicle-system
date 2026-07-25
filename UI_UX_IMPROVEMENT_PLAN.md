@@ -1,45 +1,58 @@
-# Kế Hoạch Tối Ưu UI/UX cho GoRento
+# Kế Hoạch Tối Ưu UI/UX Chi Tiết cho GoRento
 
-Tài liệu này đề xuất các cải tiến nhằm nâng cao trải nghiệm người dùng và tính thẩm mỹ của ứng dụng GoRento.
+Tài liệu này đánh giá hiện trạng và đề xuất các bước cụ thể để nâng cấp trải nghiệm người dùng (UX) và giao diện (UI) cho ứng dụng GoRento.
 
-## 1. Phản Hồi Hệ Thống (Feedback System)
-- **Vấn đề:** Hiện tại ứng dụng thiếu các thông báo phản hồi khi thao tác thành công hoặc thất bại, hoặc chỉ sử dụng SnackBar mặc định đơn điệu.
-- **Giải pháp:**
-    - Triển khai bộ Toast/SnackBar tùy chỉnh với các trạng thái: **Thành công (Success)**, **Lỗi (Error)**, **Cảnh báo (Warning)**, và **Thông tin (Info)**.
-    - Sử dụng các icon và màu sắc đặc trưng của brand để tăng tính nhận diện.
-    - Thêm các trạng thái Loading (Skeleton screens hoặc Shimmer effect) khi đang tải dữ liệu thay vì chỉ dùng vòng quay đơn giản.
+## 1. Đánh Giá Hiện Trạng
 
-## 2. Luồng Đăng Nhập & Đăng Ký (Auth Flow)
-- **Vấn đề:** Thông báo lỗi hiện tại đang hiển thị raw error message (như "DioException..."), gây khó hiểu cho người dùng.
-- **Giải pháp:**
-    - Mapping mã lỗi từ Backend thành thông điệp tiếng Việt thân thiện (ví dụ: "Sai số điện thoại hoặc mật khẩu" thay vì "401 Unauthorized").
-    - Thêm tính năng "Ghi nhớ đăng nhập" và đăng nhập bằng sinh trắc học (Vân tay/FaceID).
-    - Cải thiện UX phần nhập OTP: Tự động điền (Auto-fill) và đếm ngược thời gian gửi lại.
-
-## 3. Giao Diện Người Dùng (Visual Design)
-- **Vấn đề:** Cần đồng bộ hóa hệ thống thiết kế (Design System).
-- **Giải pháp:**
-    - **Typography:** Sử dụng font 'Inter' một cách nhất quán (đã có trong code nhưng cần tối ưu size/weight).
-    - **Micro-interactions:** Thêm các hiệu ứng chuyển cảnh mượt mà giữa các màn hình và các hiệu ứng feedback khi chạm (ripple effect, scale animation).
-    - **Dark Mode:** Hỗ trợ chế độ tối để giảm mỏi mắt và tiết kiệm pin.
-    - **Empty States:** Thiết kế các màn hình "Trống" (không có xe, không có đơn đặt) sinh động với hình minh họa (illustrations).
-
-## 4. Trải Nghiệm Đặt Xe (Booking Experience)
-- **Vấn đề:** Việc chọn ngày và vị trí cần trực quan hơn.
-- **Giải pháp:**
-    - Tích hợp bộ chọn ngày (Date Range Picker) tùy chỉnh theo style của app.
-    - Cải thiện bản đồ (Goong Maps): Thêm các marker xe sinh động, hiển thị quãng đường và thời gian dự kiến.
-    - Hiển thị rõ ràng các chi phí phát sinh (phí bảo hiểm, phí giao xe) ngay từ bước đầu.
-
-## 5. Quản Lý Xe (Owner Dashboard)
-- **Giải pháp:**
-    - Biểu đồ thống kê doanh thu trực quan.
-    - Quy trình đăng xe (Add Car) theo từng bước (Stepper) để người dùng không bị ngợp thông tin.
+| Màn hình | Ưu điểm | Hạn chế |
+|----------|---------|---------|
+| **Đăng nhập** | Layout rõ ràng, Hero header đẹp. | Lỗi hiển thị thô (DioException), thiếu feedback khi thành công. |
+| **Trang chủ** | Có thống kê nhanh, quick actions. | Các card còn đơn điệu, thiếu hiệu ứng loading (Shimmer). |
+| **Danh sách xe** | Đầy đủ thông tin, có tìm kiếm gần đây. | Bộ lọc dùng ExpansionTile chiếm nhiều diện tích, hình ảnh xe tải chậm. |
+| **Hệ thống** | Đã có Design System cơ bản. | Màu sắc chưa thực sự nổi bật, thiếu Micro-interactions. |
 
 ---
 
-## Các Bước Thực Hiện Tiếp Theo
-1. [ ] Triển khai `ToastUtils` và áp dụng cho màn hình Login/Register.
-2. [ ] Xây dựng hệ thống Error Mapping cho toàn bộ ứng dụng.
-3. [ ] Thêm hiệu ứng Shimmer cho danh sách xe.
-4. [ ] Tối ưu hóa bộ chọn địa chỉ trên bản đồ.
+## 2. Kế Hoạch Tối Ưu Chi Tiết
+
+### A. Hệ Thống Design & Phản Hồi (System Wide)
+- [x] **Hệ thống Toast:** Thay thế SnackBar mặc định bằng `ToastUtils` (Success, Error, Warning).
+- [ ] **Shimmer Loading:** Thay thế `CircularProgressIndicator` bằng Shimmer effect cho Card xe và Stats để tạo cảm giác ứng dụng phản hồi nhanh hơn.
+- [ ] **Vibrant Palette:** Tinh chỉnh bảng màu `AppTheme` để các màu Primary/Secondary tương phản tốt hơn trên nền Surface.
+- [ ] **Micro-animations:** Sử dụng `AnimatedContainer` hoặc `hero` tag cho ảnh xe khi chuyển từ danh sách vào chi tiết.
+
+### B. Màn Hình Đăng Nhập & Đăng Ký (Auth)
+- [x] **Friendly Errors:** Mapping lỗi từ API/Network sang tiếng Việt dễ hiểu.
+- [ ] **Input Focus:** Tự động focus vào ô mật khẩu sau khi nhập xong số điện thoại.
+- [ ] **Social Auth:** Thêm UI placeholders cho Google/Apple login (nếu có trong lộ trình).
+
+### C. Màn Hình Trang Chủ (Home)
+- [ ] **Personalization:** Hiển thị tên người dùng và ảnh đại diện rõ nét hơn ở Header.
+- [ ] **Vibrant Stats:** Sử dụng Gradient nhẹ cho các thẻ thống kê (Đơn thuê, Trạng thái).
+- [ ] **Banner Khuyến Mãi:** Thêm Carousel các chương trình ưu đãi hoặc xe mới nổi bật.
+
+### D. Màn Hình Danh Sách Xe (Car List)
+- [ ] **Filter Bottom Sheet:** Chuyển bộ lọc nâng cao từ `ExpansionTile` sang `ModalBottomSheet` để tối ưu không gian hiển thị danh sách.
+- [ ] **Quick Filter Chips:** Thêm các chip lọc nhanh (Giá thấp nhất, Gần tôi, 7 chỗ) ngay dưới Search bar.
+- [ ] **Image Optimization:** Sử dụng `CachedNetworkImage` để lưu đệm ảnh xe, tránh nháy khi cuộn.
+- [ ] **Empty State:** Thiết kế màn hình "Không tìm thấy xe phù hợp" với nút "Xóa bộ lọc".
+
+### E. Quy Trình Đặt Xe & Thanh Toán (Booking)
+- [ ] **Stepper UI:** Chia quy trình đặt xe thành 3 bước: Chọn ngày/vị trí -> Kiểm tra thông tin -> Thanh toán.
+- [ ] **Price Summary:** Hiển thị bảng chi tiết giá (Giá thuê x số ngày + phí) một cách minh bạch trước khi bấm đặt.
+
+### F. Kỹ Thuật & Khả Dụng (Technical UX)
+- [x] **Connection Diagnostics:** Thêm bộ kiểm tra kết nối (Connection Status Chip) tại màn hình đăng nhập để chẩn đoán lỗi 502 Bad Gateway hoặc Timeout ngay lập tức.
+- [ ] **Offline Handling:** Hiển thị thông báo và cho phép xem lại dữ liệu đã cache khi mất kết nối mạng.
+- [x] **Request Retry:** Tự động thử lại request khi gặp lỗi mạng tạm thời (đã tích hợp trong Dio interceptor cho refresh token).
+
+---
+
+## 3. Lộ Trình Thực Hiện (Priority)
+
+1. **Ưu tiên 1 (Ngay lập tức):** Hoàn thiện `ToastUtils` và Shimmer loading (Cải thiện cảm nhận về tốc độ).
+2. **Ưu tiên 2 (Giao diện):** Refactor bộ lọc danh sách xe sang Bottom Sheet và tối ưu màu sắc Theme.
+3. **Ưu tiên 3 (Nâng cao):** Thêm animations và tối ưu hóa bộ nhớ (Caching ảnh).
+
+---
+*Cập nhật lần cuối: 24/05/2024*

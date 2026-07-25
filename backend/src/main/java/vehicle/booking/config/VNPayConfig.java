@@ -32,17 +32,16 @@ public class VNPayConfig {
         List<String> fieldNames = new ArrayList<>(fields.keySet());
         Collections.sort(fieldNames);
         StringBuilder sb = new StringBuilder();
-        Iterator<String> itr = fieldNames.iterator();
-        while (itr.hasNext()) {
-            String fieldName = itr.next();
+        for (String fieldName : fieldNames) {
             String fieldValue = fields.get(fieldName);
-            if ((fieldValue != null) && (fieldValue.length() > 0)) {
+            if (fieldValue != null && !fieldValue.isEmpty()) {
+                if (sb.length() > 0) {
+                    sb.append('&');
+                }
                 sb.append(fieldName);
-                sb.append("=");
-                sb.append(fieldValue);
-            }
-            if (itr.hasNext()) {
-                sb.append("&");
+                sb.append('=');
+                // VNPay yêu cầu URL-encode giá trị khi tạo chữ ký (giống code demo chính thức)
+                sb.append(java.net.URLEncoder.encode(fieldValue, StandardCharsets.US_ASCII));
             }
         }
         return hmacSHA512(vnpHashSecret, sb.toString());

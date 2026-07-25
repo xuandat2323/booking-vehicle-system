@@ -342,6 +342,21 @@ class _DashboardBody extends StatelessWidget {
             ),
           ],
         ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: _NavButton(
+                label: 'Chi nhánh',
+                icon: Icons.storefront_rounded,
+                color: const Color(0xFFE67E22),
+                onTap: () => context.push('/admin/branches'),
+              ),
+            ),
+            const Expanded(child: SizedBox()),
+            const Expanded(child: SizedBox()),
+          ],
+        ),
       ],
     );
   }

@@ -503,7 +503,7 @@ class _BranchesCarousel extends ConsumerWidget {
               final name = branch['name'] ?? '';
               final availableCount = branch['availableCarCount'] ?? 0;
               return AppSurface(
-                onTap: () => context.push('/cars?branchId=${branch['branchId']}'),
+                onTap: () => context.go('/cars?branchId=${branch['branchId']}'),
                 color: cs.surfaceContainerLowest,
                 padding: const EdgeInsets.all(AppSpacing.lg),
                 child: SizedBox(

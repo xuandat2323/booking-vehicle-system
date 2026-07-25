@@ -139,6 +139,9 @@ public class CarServiceImpl implements CarService {
     public CarResponse getCarById(Long id) {
         Car car = carRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.CAR_NOT_FOUND, id));
+        if (car.getBranch() != null) {
+            org.hibernate.Hibernate.initialize(car.getBranch());
+        }
         String primaryImageUrl = resolvePrimaryImageUrl(car.getCarId());
         return mapToResponse(car, primaryImageUrl);
     }
@@ -247,6 +250,8 @@ public class CarServiceImpl implements CarService {
                 car.getTransmission(),
                 car.getFuelType(),
                 car.getLocation(),
+                car.getBranch() != null ? car.getBranch().getBranchId() : null,
+                car.getBranch() != null ? car.getBranch().getName() : null,
                 car.getLatitude(),
                 car.getLongitude(),
                 car.getLocationSource(),
@@ -272,6 +277,8 @@ public class CarServiceImpl implements CarService {
                 imageUrl,
                 car.getSeats(),
                 car.getLocation(),
+                car.getBranch() != null ? car.getBranch().getBranchId() : null,
+                car.getBranch() != null ? car.getBranch().getName() : null,
                 car.getLatitude(),
                 car.getLongitude(),
                 avgRating != null ? avgRating : 0.0,

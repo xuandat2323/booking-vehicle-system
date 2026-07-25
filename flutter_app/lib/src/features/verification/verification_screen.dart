@@ -1042,7 +1042,7 @@ class _TipsCard extends StatelessWidget {
           'Giấy tờ: đặt trên nền phẳng, ánh sáng đều, đủ 4 góc, không phản sáng',
           'Mặt sau CCCD: đảm bảo barcode/QR code hiển thị rõ',
           'Selfie: nhìn thẳng vào camera, đủ ánh sáng, không đeo kính',
-          'Ảnh tối thiểu 300KB, không bị mờ, nghiêng hoặc bị che khuất',
+          'Ảnh CCCD / bằng lái rõ mặt chữ càng tốt; hệ thống vẫn chấp nhận ảnh thường để hoàn tất xác minh',
         ])
           Padding(
             padding: const EdgeInsets.only(bottom: 4),

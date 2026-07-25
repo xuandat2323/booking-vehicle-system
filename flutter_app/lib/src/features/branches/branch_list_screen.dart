@@ -93,7 +93,7 @@ class _BranchCard extends StatelessWidget {
     return AppSurface(
       onTap: () {
         final branchId = branch['branchId'];
-        context.push('/cars?branchId=$branchId');
+        context.go('/cars?branchId=$branchId');
       },
       color: cs.surfaceContainerLowest,
       child: Row(

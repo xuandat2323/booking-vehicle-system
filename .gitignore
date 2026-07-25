@@ -8,6 +8,17 @@
 # Frontend (không dùng, chỉ mobile)
 frontend/
 
+# Secrets / local env
+**/.env
+!**/.env.example
+backend/src/main/resources/application-dev.properties
+flutter_app/.env.json
+
+# Local build / Python caches
+backend/.gradle-home/
+ekyc-service/.venv/
+**/__pycache__/
+
 # Claude internal
 .claude/
 **/.agents/

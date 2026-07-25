@@ -18,7 +18,7 @@ import java.util.Map;
 @SuppressWarnings({"unchecked", "rawtypes"})
 public class ViettelAiService {
 
-    @Value("${viettelai.token}")
+    @Value("${viettelai.token:}")
     private String token;
 
     private static final String BASE_URL = "https://viettelai.vn/ekyc";

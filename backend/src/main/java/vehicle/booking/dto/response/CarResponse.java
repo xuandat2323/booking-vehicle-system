@@ -20,6 +20,8 @@ public record CarResponse(
         Transmission transmission,
         FuelType fuelType,
         String location,
+        Long branchId,
+        String branchName,
         java.math.BigDecimal latitude,
         java.math.BigDecimal longitude,
         String locationSource,

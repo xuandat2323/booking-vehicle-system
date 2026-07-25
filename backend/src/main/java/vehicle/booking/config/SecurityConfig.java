@@ -61,6 +61,11 @@ public class SecurityConfig {
                         .requestMatchers("/api/cars/**").permitAll()
                         .requestMatchers("/api/branches/**").permitAll()
                         .requestMatchers("/api/geo/**").permitAll()
+                        .requestMatchers("/api/payments/sepay/webhook").permitAll()
+                        .requestMatchers("/api/payments/vnpay/return").permitAll()
+                        .requestMatchers("/api/payments/payos/webhook").permitAll()
+                        .requestMatchers("/api/payments/payos/return").permitAll()
+                        .requestMatchers("/api/payments/payos/cancel").permitAll()
 
                         .requestMatchers("/api/user/me").authenticated()
                         .requestMatchers("/api/bookings/**").hasRole("USER")
@@ -93,10 +98,19 @@ public class SecurityConfig {
         configuration.setAllowedOriginPatterns(Arrays.asList(
                 "http://localhost:*",
                 "http://127.0.0.1:*",
-                "http://10.1.1.179:*"
+                "http://10.1.1.179:*",
+                "https://*.ngrok-free.app",
+                "https://*.ngrok.io"
         ));
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
-        configuration.setAllowedHeaders(Arrays.asList("Authorization", "Content-Type", "Accept", "Origin"));
+        // Include ngrok-skip-browser-warning so Flutter web (Chrome) preflight succeeds via free ngrok.
+        configuration.setAllowedHeaders(Arrays.asList(
+                "Authorization",
+                "Content-Type",
+                "Accept",
+                "Origin",
+                "ngrok-skip-browser-warning"
+        ));
         configuration.setAllowCredentials(true);
         configuration.setMaxAge(3600L);
 

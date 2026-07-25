@@ -30,6 +30,7 @@ import '../../features/admin/admin_dashboard_screen.dart';
 import '../../features/admin/admin_users_screen.dart';
 import '../../features/admin/admin_cars_screen.dart';
 import '../../features/admin/admin_bookings_screen.dart';
+import '../../features/admin/admin_branches_screen.dart';
 
 final appRouterProvider = Provider<GoRouter>((ref) {
   final auth = ref.read(authControllerProvider);
@@ -87,6 +88,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                 GoRoute(path: 'users', builder: (c, s) => const AdminUsersScreen()),
                 GoRoute(path: 'cars', builder: (c, s) => const AdminCarsScreen()),
                 GoRoute(path: 'bookings', builder: (c, s) => const AdminBookingsScreen()),
+                GoRoute(path: 'branches', builder: (c, s) => const AdminBranchesScreen()),
               ],
             ),
           ]),

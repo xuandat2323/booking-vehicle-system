@@ -59,8 +59,9 @@ public class VNPayServiceImpl implements VNPayService {
         vnp_Params.put("vnp_ReturnUrl", vnPayConfig.getVnpReturnUrl());
         vnp_Params.put("vnp_IpAddr", getIpAddress(request));
 
-        Calendar cld = Calendar.getInstance(TimeZone.getTimeZone("Etc/GMT+7"));
+        Calendar cld = Calendar.getInstance(TimeZone.getTimeZone("Asia/Ho_Chi_Minh"));
         SimpleDateFormat formatter = new SimpleDateFormat("yyyyMMddHHmmss");
+        formatter.setTimeZone(TimeZone.getTimeZone("Asia/Ho_Chi_Minh"));
         String vnp_CreateDate = formatter.format(cld.getTime());
         vnp_Params.put("vnp_CreateDate", vnp_CreateDate);
         
@@ -68,35 +69,20 @@ public class VNPayServiceImpl implements VNPayService {
         String vnp_ExpireDate = formatter.format(cld.getTime());
         vnp_Params.put("vnp_ExpireDate", vnp_ExpireDate);
         
-        // Build query string
         List<String> fieldNames = new ArrayList<>(vnp_Params.keySet());
         Collections.sort(fieldNames);
-        StringBuilder hashData = new StringBuilder();
         StringBuilder query = new StringBuilder();
-        Iterator<String> itr = fieldNames.iterator();
-        while (itr.hasNext()) {
-            String fieldName = itr.next();
+        boolean first = true;
+        for (String fieldName : fieldNames) {
             String fieldValue = vnp_Params.get(fieldName);
-            if ((fieldValue != null) && (fieldValue.length() > 0)) {
-                //Build hash data
-                hashData.append(fieldName);
-                hashData.append('=');
-                hashData.append(URLEncoder.encode(fieldValue, StandardCharsets.US_ASCII));
-                //Build query
-                query.append(URLEncoder.encode(fieldName, StandardCharsets.US_ASCII));
-                query.append('=');
-                query.append(URLEncoder.encode(fieldValue, StandardCharsets.US_ASCII));
-                if (itr.hasNext()) {
-                    query.append('&');
-                    hashData.append('&');
-                }
-            }
+            if (fieldValue == null || fieldValue.isEmpty()) continue;
+            if (!first) query.append('&');
+            first = false;
+            query.append(URLEncoder.encode(fieldName, StandardCharsets.US_ASCII));
+            query.append('=');
+            query.append(URLEncoder.encode(fieldValue, StandardCharsets.US_ASCII));
         }
-        
-        String queryUrl = query.toString();
-        String vnp_SecureHash = vnPayConfig.hashAllFields(vnp_Params);
-        queryUrl += "&vnp_SecureHash=" + vnp_SecureHash;
-        
+        String queryUrl = query + "&vnp_SecureHash=" + vnPayConfig.hashAllFields(vnp_Params);
         return vnPayConfig.getVnpPayUrl() + "?" + queryUrl;
     }
 

@@ -55,23 +55,36 @@ firebase.service-account-json=${FIREBASE_SERVICE_ACCOUNT_JSON:}
 # Cách 2: đường dẫn tới file JSON (dùng cho local dev)
 firebase.service-account-path=${FIREBASE_SERVICE_ACCOUNT_PATH:classpath:firebase-service-account.json}
 
-# VNPay Sandbox — đăng ký tại: https://sandbox.vnpayment.vn/devsupport/
-# Sau khi đăng ký sẽ nhận được TMN Code và Hash Secret qua email
+# VNPay — from backend/.env
 vnpay.tmn-code=${VNPAY_TMN_CODE:YOUR_TMN_CODE}
 vnpay.hash-secret=${VNPAY_HASH_SECRET:YOUR_HASH_SECRET}
 vnpay.pay-url=https://sandbox.vnpayment.vn/paymentv2/vpcpay.html
-# return-url: mobile webview intercept URL này — host không cần reachable khi test mobile
-# Khi test web/Postman thì cần ngrok: ngrok http 8080
 vnpay.return-url=${VNPAY_RETURN_URL:http://localhost:8080/api/payments/vnpay/return}
-# frontend-url: chỉ dùng cho web redirect — có thể giữ localhost khi test mobile
-vnpay.frontend-url=${VNPAY_FRONTEND_URL:http://localhost:5173/my-bookings}
+vnpay.frontend-url=${VNPAY_FRONTEND_URL:http://localhost:49457/#/bookings}
 
-# Goong Maps (https://account.goong.io)
-# API Key — dùng cho geocoding / autocomplete / routing
-goong.api-key=YOUR_GOONG_API_KEY
+# SePay — from backend/.env
+sepay.mode=${SEPAY_MODE:mock}
+sepay.bank-bin=${SEPAY_BANK_BIN:970422}
+sepay.bank-name=${SEPAY_BANK_NAME:MBBank}
+sepay.account-number=${SEPAY_ACCOUNT_NUMBER:0123456789}
+sepay.account-name=${SEPAY_ACCOUNT_NAME:CONG TY GORENTO}
+sepay.webhook-api-key=${SEPAY_WEBHOOK_API_KEY:}
 
-# ViettelAI eKYC (https://viettelai.vn)
-viettelai.token=YOUR_VIETTELAI_TOKEN
+# PayOS — from backend/.env
+payos.mode=${PAYOS_MODE:mock}
+payos.client-id=${PAYOS_CLIENT_ID:YOUR_PAYOS_CLIENT_ID}
+payos.api-key=${PAYOS_API_KEY:YOUR_PAYOS_API_KEY}
+payos.checksum-key=${PAYOS_CHECKSUM_KEY:YOUR_PAYOS_CHECKSUM_KEY}
+payos.return-url=${PAYOS_RETURN_URL:http://localhost:8080/api/payments/payos/return}
+payos.cancel-url=${PAYOS_CANCEL_URL:http://localhost:8080/api/payments/payos/cancel}
+payos.frontend-url=${PAYOS_FRONTEND_URL:http://localhost:49457/#/bookings}
+payos.bank-bin=${PAYOS_BANK_BIN:970422}
+payos.account-number=${PAYOS_ACCOUNT_NUMBER:0123456789}
+payos.account-name=${PAYOS_ACCOUNT_NAME:CONG TY GORENTO}
 
-# Local Python eKYC fallback (chạy: cd ekyc-service && docker-compose up)
+# Goong Maps — from backend/.env
+goong.api-key=${GOONG_API_KEY:YOUR_GOONG_API_KEY}
+
+# eKYC — OCR thật qua ekyc-service (EasyOCR). Đổi mock chỉ khi demo offline.
+ekyc.mode=local
 ekyc.local-service-url=http://localhost:8001
