@@ -45,20 +45,32 @@ public class AuthService {
     private PhoneNumberService phoneNumberService;
 
     @Autowired
-    private PhoneVerificationService phoneVerificationService;
+    private EmailVerificationService emailVerificationService;
 
     public AuthenticationResponse register(RegisterRequest request) {
         String normalizedPhone = phoneNumberService.normalizeToE164(request.phone());
+        String normalizedEmail = emailVerificationService.normalizeEmail(request.email());
 
         if (userRepository.findByPhone(normalizedPhone).isPresent()) {
             throw new AppException(ErrorCode.AUTH_PHONE_ALREADY_EXISTS, normalizedPhone);
         }
+        if (userRepository.findByEmail(normalizedEmail).isPresent()) {
+            throw new AppException(ErrorCode.AUTH_EMAIL_ALREADY_EXISTS, normalizedEmail);
+        }
 
-        phoneVerificationService.verifyOtp(normalizedPhone, request.otp());
+        emailVerificationService.verifyRegistrationOtp(normalizedEmail, request.otp());
 
         User user = new User();
-        user.setName(request.name());
-        user.setEmail(request.email());
+        String displayName = request.name();
+        if (displayName == null || displayName.isBlank()) {
+            // App đăng ký cũ chỉ gửi SĐT — tránh name null trong thông báo/admin.
+            String tail = normalizedPhone.length() >= 4
+                    ? normalizedPhone.substring(normalizedPhone.length() - 4)
+                    : normalizedPhone;
+            displayName = "Khách " + tail;
+        }
+        user.setName(displayName.trim());
+        user.setEmail(normalizedEmail);
         user.setPhone(normalizedPhone);
         user.setDriveLicense(request.driveLicense());
         user.setPassword(passwordEncoder.encode(request.password()));

@@ -337,7 +337,7 @@ class ProfileScreen extends ConsumerWidget {
   }
 }
 
-/// Cho phép user cập nhật tên, email, GPLX (đăng ký chỉ có SĐT nên email trống).
+/// Cho phép user cập nhật tên, email, GPLX.
 class _EditProfileDialog extends ConsumerStatefulWidget {
   const _EditProfileDialog({
     required this.initialName,

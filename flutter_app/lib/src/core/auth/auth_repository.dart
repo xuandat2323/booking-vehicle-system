@@ -15,13 +15,29 @@ class AuthRepository {
     return _toTokens(data);
   }
 
-  Future<AuthTokens> register({required String phone, required String password, required String otp}) async {
-    final data = await _postAuth('/api/auth/register', {'phone': phone, 'password': password, 'otp': otp});
+  Future<AuthTokens> register({
+    required String phone,
+    required String password,
+    required String otp,
+    required String email,
+    String? name,
+  }) async {
+    final data = await _postAuth('/api/auth/register', {
+      'phone': phone,
+      'email': email,
+      'password': password,
+      'otp': otp,
+      if (name != null && name.trim().isNotEmpty) 'name': name.trim(),
+    });
     return _toTokens(data);
   }
 
   Future<void> sendOtp({required String phone}) async {
     await _dio.post('/api/auth/phone/send-otp', data: {'phone': phone});
+  }
+
+  Future<void> sendEmailOtp({required String email}) async {
+    await _dio.post('/api/auth/email/send-otp', data: {'email': email});
   }
 
   Future<void> forgotPassword({required String email}) async {

@@ -5,5 +5,6 @@ import vehicle.booking.entity.User;
 
 public interface EmailService {
     void sendOtpResetPassword(User user, String otp);
+    void sendRegistrationOtp(String email, String otp);
     void sendPaymentConfirmation(Payment payment);
 }

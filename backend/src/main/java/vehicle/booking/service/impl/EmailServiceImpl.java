@@ -5,6 +5,8 @@ import vehicle.booking.entity.Car;
 import vehicle.booking.entity.Payment;
 import vehicle.booking.entity.User;
 import vehicle.booking.entity.enums.PaymentStatus;
+import vehicle.booking.exception.AppException;
+import vehicle.booking.exception.ErrorCode;
 import vehicle.booking.service.EmailService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -39,6 +41,23 @@ public class EmailServiceImpl implements EmailService {
 
         } catch (Exception e) {
             log.error("Failed to send OTP email to {}: {}", user.getEmail(), e.getMessage(), e);
+        }
+    }
+
+    @Override
+    public void sendRegistrationOtp(String email, String otp) {
+        try {
+            SimpleMailMessage message = new SimpleMailMessage();
+            message.setFrom(fromEmail);
+            message.setTo(email);
+            message.setSubject("[GoRento] Mã OTP đăng ký tài khoản");
+            message.setText(buildRegistrationOtpEmailText(otp));
+
+            mailSender.send(message);
+            log.info("Registration OTP email sent successfully to: {}", email);
+        } catch (Exception e) {
+            log.error("Failed to send registration OTP email to {}: {}", email, e.getMessage(), e);
+            throw new AppException(ErrorCode.EMAIL_OTP_SEND_FAILED);
         }
     }
 
@@ -84,6 +103,24 @@ public class EmailServiceImpl implements EmailService {
                 Trân trọng,
                 Đội ngũ Vehicle Booking
                 """.formatted(userName, otp);
+    }
+
+    private String buildRegistrationOtpEmailText(String otp) {
+        return """
+                Xin chào,
+
+                Bạn đang đăng ký tài khoản GoRento.
+
+                Mã OTP của bạn là: %s
+
+                Mã này có hiệu lực trong 5 phút.
+                Vui lòng KHÔNG chia sẻ mã này với bất kỳ ai.
+
+                Nếu bạn không yêu cầu đăng ký, hãy bỏ qua email này.
+
+                Trân trọng,
+                Đội ngũ GoRento
+                """.formatted(otp);
     }
 
     private String buildPaymentEmailText(Payment payment) {

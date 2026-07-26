@@ -48,25 +48,36 @@ class AuthController extends ChangeNotifier {
     }
   }
 
-  Future<void> register(String phone, String password, String otp) async {
+  Future<void> register(
+    String phone,
+    String password,
+    String otp, {
+    required String email,
+    String? name,
+  }) async {
     _isLoading = true;
     notifyListeners();
     try {
-      String finalOtp = otp;
-      if (_useFirebase && _verificationId != null) {
-        final phoneService = FirebasePhoneService();
-        final idToken = await phoneService.getFirebaseIdToken(
-          verificationId: _verificationId!,
-          smsCode: otp,
-        );
-        if (idToken == null) {
-          throw Exception('Không lấy được mã xác thực từ Firebase');
-        }
-        finalOtp = idToken;
-      }
-      final tokens = await _repo.register(phone: phone, password: password, otp: finalOtp);
+      final tokens = await _repo.register(
+        phone: phone,
+        password: password,
+        otp: otp,
+        email: email,
+        name: name,
+      );
       await _repo.saveTokens(tokens);
       _isAuthenticated = true;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> sendEmailOtp(String email) async {
+    _isLoading = true;
+    notifyListeners();
+    try {
+      await _repo.sendEmailOtp(email: email);
     } finally {
       _isLoading = false;
       notifyListeners();

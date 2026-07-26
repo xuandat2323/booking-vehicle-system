@@ -23,6 +23,7 @@ public class AuthController {
     @PostMapping("/register")
     public ResponseEntity<ApiResponse<AuthenticationResponse>> register(@RequestBody RegisterRequest request) {
         if (request.phone() == null || request.phone().isEmpty() ||
+                request.email() == null || request.email().isBlank() ||
                 request.password() == null || request.password().isEmpty() ||
                 request.otp() == null || request.otp().isBlank()) {
             return ResponseEntity.badRequest().body(

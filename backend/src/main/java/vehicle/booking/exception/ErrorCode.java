@@ -43,6 +43,41 @@ public enum ErrorCode {
             "Số điện thoại '%s' đã được sử dụng.",
             HttpStatus.CONFLICT
     ),
+    AUTH_EMAIL_ALREADY_EXISTS(
+            "AUTH_EMAIL_ALREADY_EXISTS",
+            "Email '%s' đã được sử dụng.",
+            HttpStatus.CONFLICT
+    ),
+    EMAIL_REQUIRED(
+            "EMAIL_REQUIRED",
+            "Vui lòng nhập email.",
+            HttpStatus.BAD_REQUEST
+    ),
+    EMAIL_INVALID(
+            "EMAIL_INVALID",
+            "Email không hợp lệ.",
+            HttpStatus.BAD_REQUEST
+    ),
+    EMAIL_OTP_REQUIRED(
+            "EMAIL_OTP_REQUIRED",
+            "Vui lòng nhập mã OTP.",
+            HttpStatus.BAD_REQUEST
+    ),
+    EMAIL_OTP_INVALID(
+            "EMAIL_OTP_INVALID",
+            "Mã OTP không hợp lệ.",
+            HttpStatus.BAD_REQUEST
+    ),
+    EMAIL_OTP_EXPIRED(
+            "EMAIL_OTP_EXPIRED",
+            "Mã OTP đã hết hạn. Vui lòng yêu cầu mã mới.",
+            HttpStatus.BAD_REQUEST
+    ),
+    EMAIL_OTP_SEND_FAILED(
+            "EMAIL_OTP_SEND_FAILED",
+            "Không thể gửi mã OTP tới email. Vui lòng thử lại sau.",
+            HttpStatus.BAD_REQUEST
+    ),
     PHONE_INVALID(
             "PHONE_INVALID",
             "Số điện thoại không hợp lệ.",
@@ -195,7 +230,12 @@ public enum ErrorCode {
     ),
     BOOKING_CANCEL_NOT_ALLOWED(
             "BOOKING_CANCEL_NOT_ALLOWED",
-            "USER chỉ có thể hủy booking khi trạng thái là PENDING. Trạng thái hiện tại: %s",
+            "Không thể hủy booking ở trạng thái hiện tại: %s",
+            HttpStatus.BAD_REQUEST
+    ),
+    BOOKING_CANCEL_REASON_REQUIRED(
+            "BOOKING_CANCEL_REASON_REQUIRED",
+            "Admin hủy đơn phải nhập lý do hủy và hướng xử lý.",
             HttpStatus.BAD_REQUEST
     ),
     BOOKING_LOCATION_UPDATE_NOT_ALLOWED(
@@ -247,6 +287,11 @@ public enum ErrorCode {
             "PAYMENT_ACCESS_DENIED",
             "Bạn không có quyền xem payment này.",
             HttpStatus.FORBIDDEN
+    ),
+    PAYMENT_CREATE_FAILED(
+            "PAYMENT_CREATE_FAILED",
+            "Không tạo được thanh toán đặt cọc: %s",
+            HttpStatus.BAD_REQUEST
     ),
     REVIEW_ALREADY_EXISTS(
             "REVIEW_ALREADY_EXISTS",
