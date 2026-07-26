@@ -10,9 +10,11 @@ import vehicle.booking.entity.enums.CarStatus;
 import vehicle.booking.entity.enums.InvoiceStatus;
 import vehicle.booking.exception.*;
 import vehicle.booking.repository.BookingRepository;
+import vehicle.booking.repository.BranchRepository;
 import vehicle.booking.repository.CarRepository;
 import vehicle.booking.repository.InvoiceRepository;
 import vehicle.booking.repository.UserRepository;
+import vehicle.booking.realtime.RealtimeEventHub;
 import vehicle.booking.entity.enums.NotificationType;
 import vehicle.booking.service.BookingService;
 import vehicle.booking.service.InvoiceService;
@@ -49,10 +51,12 @@ public class BookingServiceImpl implements BookingService {
 
     private final BookingRepository bookingRepository;
     private final CarRepository carRepository;
+    private final BranchRepository branchRepository;
     private final InvoiceRepository invoiceRepository;
     private final UserRepository userRepository;
     private final InvoiceService invoiceService;
     private final NotificationService notificationService;
+    private final RealtimeEventHub realtimeEventHub;
 
     @Value("${booking.expiration.pending-payment-timeout:15m}")
     private Duration pendingPaymentTimeout;
@@ -113,6 +117,9 @@ public class BookingServiceImpl implements BookingService {
         booking.setDropoffAddress(request.dropoffAddress());
         booking.setDropoffLatitude(request.dropoffLatitude());
         booking.setDropoffLongitude(request.dropoffLongitude());
+        if (request.dropoffBranchId() != null) {
+            booking.setDropoffBranch(resolveBranch(request.dropoffBranchId()));
+        }
         booking.setStatus(BookingStatus.PENDING);
 
         booking = bookingRepository.save(booking);
@@ -121,10 +128,18 @@ public class BookingServiceImpl implements BookingService {
         carRepository.save(car);
 
         invoiceService.createInvoiceForBooking(booking);
+        String carLabel = car.getBrand() + " " + car.getName();
         notificationService.send(user,
                 "Đặt xe thành công",
-                "Bạn đã đặt xe " + car.getBrand() + " " + car.getName() + " từ " + booking.getStartDate() + " đến " + booking.getEndDate(),
+                "Bạn đã đặt xe " + carLabel + " từ " + booking.getStartDate()
+                        + " đến " + booking.getEndDate() + ". Vui lòng đặt cọc 30% để giữ xe.",
                 NotificationType.BOOKING_CREATED, booking.getBookingId());
+        notificationService.sendToAdmins(
+                "Đơn thuê mới",
+                "Khách " + user.getName() + " vừa tạo đơn #" + booking.getBookingId()
+                        + " thuê " + carLabel + ".",
+                NotificationType.BOOKING_CREATED, booking.getBookingId());
+        publishBooking(booking);
         return mapToResponse(booking);
     }
 
@@ -192,10 +207,16 @@ public class BookingServiceImpl implements BookingService {
         }
 
         notificationService.send(booking.getUser(),
-                "Booking đã bị hủy",
-                "Đơn đặt xe #" + booking.getBookingId() + " đã được hủy thành công.",
+                "Đơn đã bị hủy",
+                "Đơn đặt xe #" + booking.getBookingId() + " đã được hủy.",
+                NotificationType.BOOKING_CANCELLED, booking.getBookingId());
+        notificationService.sendToAdmins(
+                "Đơn bị hủy",
+                "Đơn #" + booking.getBookingId() + " của khách "
+                        + booking.getUser().getName() + " đã bị hủy.",
                 NotificationType.BOOKING_CANCELLED, booking.getBookingId());
 
+        publishBooking(booking);
         return mapToResponse(booking);
     }
 
@@ -221,10 +242,12 @@ public class BookingServiceImpl implements BookingService {
         }
 
         notificationService.send(booking.getUser(),
-                "Booking đã được xác nhận",
-                "Đơn đặt xe #" + booking.getBookingId() + " đã được xác nhận. Hãy chuẩn bị cho chuyến đi của bạn!",
+                "Đơn đã được xác nhận",
+                "Đơn #" + booking.getBookingId()
+                        + " đã được xác nhận. Hãy đến điểm nhận xe đúng lịch đã đặt.",
                 NotificationType.BOOKING_CONFIRMED, booking.getBookingId());
 
+        publishBooking(booking);
         return mapToResponse(booking);
     }
 
@@ -253,9 +276,10 @@ public class BookingServiceImpl implements BookingService {
 
         notificationService.send(booking.getUser(),
                 "Bắt đầu chuyến đi",
-                "Bạn đã nhận xe và chuyến đi #" + booking.getBookingId() + " chính thức bắt đầu!",
-                NotificationType.BOOKING_CONFIRMED, booking.getBookingId());
+                "Bạn đã nhận xe. Chuyến đi #" + booking.getBookingId() + " đang diễn ra.",
+                NotificationType.BOOKING_RENTING, booking.getBookingId());
 
+        publishBooking(booking);
         return mapToResponse(booking);
     }
 
@@ -273,12 +297,54 @@ public class BookingServiceImpl implements BookingService {
         booking.setStatus(BookingStatus.RETURNED);
         booking = bookingRepository.save(booking);
 
-        notificationService.send(booking.getUser(),
-                "Trả xe thành công",
-                "Đơn đặt xe #" + booking.getBookingId() + " đã ghi nhận trả xe. Vui lòng chờ admin hoàn tất đơn.",
-                NotificationType.BOOKING_COMPLETED, booking.getBookingId());
+        // Khi khách trả xe: chuyển vị trí xe về chi nhánh khách đã chọn làm điểm trả.
+        moveCarToDropoffBranch(booking);
 
+        notificationService.send(booking.getUser(),
+                "Đã ghi nhận trả xe",
+                "Đơn #" + booking.getBookingId()
+                        + " đã trả xe. Vui lòng chờ admin kiểm tra và hoàn tất đơn.",
+                NotificationType.BOOKING_RETURNED, booking.getBookingId());
+        notificationService.sendToAdmins(
+                "Khách đã trả xe",
+                "Đơn #" + booking.getBookingId() + " của khách "
+                        + booking.getUser().getName() + " đã trả xe, cần hoàn tất đơn.",
+                NotificationType.BOOKING_RETURNED, booking.getBookingId());
+
+        publishBooking(booking);
         return mapToResponse(booking);
+    }
+
+    /**
+     * Sau khi khách trả xe, cập nhật cơ sở & toạ độ của xe theo chi nhánh trả xe.
+     * Lần thuê tiếp theo, điểm đón mặc định sẽ là chi nhánh này.
+     */
+    private void moveCarToDropoffBranch(Booking booking) {
+        Branch dropoffBranch = booking.getDropoffBranch();
+        Car car = booking.getCar();
+        if (dropoffBranch == null || car == null) {
+            return;
+        }
+
+        car.setBranch(dropoffBranch);
+        if (dropoffBranch.getLatitude() != null && dropoffBranch.getLongitude() != null) {
+            car.setLatitude(dropoffBranch.getLatitude());
+            car.setLongitude(dropoffBranch.getLongitude());
+            car.setLocationSource("BRANCH");
+            car.setLocationUpdatedAt(LocalDateTime.now());
+        }
+        String branchAddress = dropoffBranch.getAddress();
+        if (branchAddress != null && !branchAddress.isBlank()) {
+            car.setLocation(branchAddress);
+        }
+        carRepository.save(car);
+        log.info("Car {} moved to dropoff branch {} after return of booking {}",
+                car.getCarId(), dropoffBranch.getBranchId(), booking.getBookingId());
+    }
+
+    private Branch resolveBranch(Long branchId) {
+        return branchRepository.findById(branchId)
+                .orElseThrow(() -> new AppException(ErrorCode.BRANCH_NOT_FOUND, branchId));
     }
 
     @Override
@@ -320,9 +386,11 @@ public class BookingServiceImpl implements BookingService {
 
         notificationService.send(booking.getUser(),
                 "Chuyến đi hoàn tất",
-                "Cảm ơn bạn đã sử dụng GoRento! Đơn #" + booking.getBookingId() + " đã hoàn thành. Hãy để lại đánh giá nhé.",
+                "Cảm ơn bạn đã dùng GoRento! Đơn #" + booking.getBookingId()
+                        + " đã hoàn thành. Hãy để lại đánh giá nhé.",
                 NotificationType.BOOKING_COMPLETED, booking.getBookingId());
 
+        publishBooking(booking);
         return mapToResponse(booking);
     }
 
@@ -354,8 +422,19 @@ public class BookingServiceImpl implements BookingService {
                 car.setStatus(CarStatus.AVAILABLE);
             }
 
-            expiredBookingIds.add(booking.getBookingId());
+            notificationService.send(booking.getUser(),
+                    "Đơn đã bị hủy",
+                    "Đơn #" + booking.getBookingId()
+                            + " đã hủy vì quá hạn đặt cọc.",
+                    NotificationType.BOOKING_CANCELLED, booking.getBookingId());
+            notificationService.sendToAdmins(
+                    "Đơn hết hạn cọc",
+                    "Đơn #" + booking.getBookingId() + " của khách "
+                            + booking.getUser().getName() + " đã hủy vì quá hạn đặt cọc.",
+                    NotificationType.BOOKING_CANCELLED, booking.getBookingId());
 
+            expiredBookingIds.add(booking.getBookingId());
+            publishBooking(booking);
         }
 
         return expiredBookingIds;
@@ -367,11 +446,11 @@ public class BookingServiceImpl implements BookingService {
         Booking booking = bookingRepository.findById(bookingId)
                 .orElseThrow(() -> new AppException(ErrorCode.BOOKING_NOT_FOUND, bookingId));
         verifyOwner(booking, currentUserPhone);
-        booking.setPickupAddress(request.address());
-        booking.setPickupLatitude(request.latitude());
-        booking.setPickupLongitude(request.longitude());
-        booking = bookingRepository.save(booking);
-        return mapToResponse(booking);
+        // Điểm nhận cố định theo chi nhánh của xe — không cho khách đổi sau khi tạo đơn.
+        throw new AppException(
+                ErrorCode.BOOKING_LOCATION_UPDATE_NOT_ALLOWED,
+                "điểm nhận xe",
+                booking.getStatus());
     }
 
     @Override
@@ -380,11 +459,40 @@ public class BookingServiceImpl implements BookingService {
         Booking booking = bookingRepository.findById(bookingId)
                 .orElseThrow(() -> new AppException(ErrorCode.BOOKING_NOT_FOUND, bookingId));
         verifyOwner(booking, currentUserPhone);
+        if (!canUpdateDropoff(booking.getStatus())) {
+            throw new AppException(
+                    ErrorCode.BOOKING_LOCATION_UPDATE_NOT_ALLOWED,
+                    "điểm trả xe",
+                    booking.getStatus());
+        }
         booking.setDropoffAddress(request.address());
         booking.setDropoffLatitude(request.latitude());
         booking.setDropoffLongitude(request.longitude());
+        if (request.branchId() != null) {
+            booking.setDropoffBranch(resolveBranch(request.branchId()));
+        }
         booking = bookingRepository.save(booking);
+        publishBooking(booking);
         return mapToResponse(booking);
+    }
+
+    /** Cho đổi điểm trả đến trước khi đơn đã RETURNED/COMPLETED/CANCELLED. */
+    private boolean canUpdateDropoff(BookingStatus status) {
+        return status == BookingStatus.PENDING
+                || status == BookingStatus.DEPOSIT_PAID
+                || status == BookingStatus.CONFIRMED
+                || status == BookingStatus.RENTING;
+    }
+
+    private void publishBooking(Booking booking) {
+        if (booking == null || booking.getUser() == null) {
+            return;
+        }
+        realtimeEventHub.publishBookingUpdated(
+                booking.getUser().getUserId(),
+                booking.getBookingId(),
+                booking.getStatus() != null ? booking.getStatus().name() : null
+        );
     }
 
     private void verifyOwner(Booking booking, String currentUserPhone) {

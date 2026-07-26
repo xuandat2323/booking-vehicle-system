@@ -98,13 +98,15 @@ class _BranchPickerSheet extends ConsumerWidget {
                       controller: scrollController,
                       padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
                       itemCount: branches.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.sm),
+                      separatorBuilder: (context, index) =>
+                          const SizedBox(height: AppSpacing.sm),
                       itemBuilder: (context, index) {
                         final b = branches[index];
                         final name = b['name']?.toString() ?? '';
                         final address = b['address']?.toString() ?? '';
                         final lat = (b['latitude'] as num?)?.toDouble() ?? 0;
                         final lng = (b['longitude'] as num?)?.toDouble() ?? 0;
+                        final branchId = (b['branchId'] as num?)?.toInt();
                         final selected = initialLocation != null &&
                             initialLocation!.address.contains(name);
 
@@ -116,6 +118,7 @@ class _BranchPickerSheet extends ConsumerWidget {
                                 address: address.isNotEmpty ? '$name — $address' : name,
                                 lat: lat,
                                 lng: lng,
+                                branchId: branchId,
                               ),
                             );
                           },

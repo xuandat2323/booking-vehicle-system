@@ -60,6 +60,14 @@ public class Booking {
     @Column(name = "dropoff_longitude", precision = 10, scale = 7)
     private BigDecimal dropoffLongitude;
 
+    /**
+     * Chi nhánh khách chọn để trả xe. Khi khách bấm trả xe, vị trí của xe
+     * sẽ được chuyển về chi nhánh này.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "dropoff_branch_id")
+    private Branch dropoffBranch;
+
     @Column(name = "total_price", nullable = false, precision = 12, scale = 2)
     private BigDecimal totalPrice;
 

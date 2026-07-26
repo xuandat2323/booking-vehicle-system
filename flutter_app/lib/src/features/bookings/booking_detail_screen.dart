@@ -10,10 +10,27 @@ import 'booking_history_screen.dart';
 import 'payment_webview_screen.dart';
 import 'review_dialog.dart';
 
-final bookingDetailProvider = FutureProvider.family<Map<String, dynamic>, String>((ref, bookingId) async {
+/// Tăng mỗi khi SSE báo BOOKING_UPDATED — buộc chi tiết gọi lại API.
+final bookingRealtimeRevisionProvider = StateProvider<int>((ref) => 0);
+
+/// bookingId → status mới nhất từ SSE.
+final bookingRealtimeStatusProvider =
+    StateProvider<Map<String, String>>((ref) => const {});
+
+final bookingDetailProvider =
+    FutureProvider.autoDispose.family<Map<String, dynamic>, String>(
+        (ref, bookingId) async {
+  // Watch revision → mỗi BOOKING_UPDATED buộc gọi lại GET /api/bookings/{id}.
+  ref.watch(bookingRealtimeRevisionProvider);
   final dio = ref.read(dioProvider);
   final response = await dio.get('/api/bookings/$bookingId');
-  final data = response.data['data'] as Map<String, dynamic>;
+  final data = Map<String, dynamic>.from(response.data['data'] as Map);
+
+  // Nếu SSE mang status mới hơn response (race hiếm), ưu tiên status realtime.
+  final liveStatus = ref.read(bookingRealtimeStatusProvider)[bookingId];
+  if (liveStatus != null && liveStatus.isNotEmpty) {
+    data['status'] = liveStatus;
+  }
   return data;
 });
 
@@ -151,27 +168,27 @@ class BookingDetailScreen extends ConsumerWidget {
       'PENDING' => (
           Icons.info_outline_rounded,
           cs.secondary,
-          'Đơn đã tạo. Đặt cọc 30% để giữ xe. Phần còn lại thanh toán khi kết thúc chuyến.',
+          'Đơn đang chờ đặt cọc 30% để giữ xe. Điểm nhận cố định theo chi nhánh của xe; bạn có thể đổi điểm trả hoặc hủy đơn.',
         ),
       'DEPOSIT_PAID' => (
           Icons.hourglass_top_rounded,
           Colors.orange,
-          'Đã nhận cọc thành công. Vui lòng chờ admin duyệt đơn giữ xe.',
+          'Đã nhận cọc thành công. Đơn đang chờ admin xác nhận. Điểm nhận cố định; bạn vẫn có thể đổi điểm trả.',
         ),
       'CONFIRMED' => (
           Icons.check_circle_outline_rounded,
           cs.primary,
-          'Admin đã duyệt đơn. Đến chi nhánh nhận xe đúng lịch đã đặt.',
+          'Đơn đã được xác nhận. Hãy đến điểm nhận cố định đúng lịch. Bạn vẫn có thể đổi điểm trả trước khi nhận xe.',
         ),
       'RENTING' || 'IN_PROGRESS' => (
           Icons.directions_car_filled_rounded,
           const Color(0xFF6750A4),
-          'Bạn đang thuê xe. Khi trả xe, hãy đến điểm trả đã chọn và bấm Trả xe.',
+          'Bạn đang thuê xe. Có thể đổi điểm trả; khi đến chi nhánh đã chọn, hãy bấm Trả xe.',
         ),
       'RETURNED' => (
           Icons.pending_actions_rounded,
           Colors.teal,
-          'Đã ghi nhận trả xe. Vui lòng chờ admin chốt thanh toán phần còn lại và hoàn cọc.',
+          'Đã ghi nhận trả xe tại chi nhánh đã chọn. Vui lòng chờ admin kiểm tra và hoàn tất đơn.',
         ),
       'COMPLETED' => (
           Icons.task_alt_rounded,
@@ -365,7 +382,11 @@ class BookingDetailScreen extends ConsumerWidget {
                 ],
 
                 // Actions
-                if (status == 'PENDING' || status == 'CONFIRMED') ...[
+                if (status == 'PENDING' ||
+                    status == 'DEPOSIT_PAID' ||
+                    status == 'CONFIRMED' ||
+                    status == 'RENTING' ||
+                    status == 'IN_PROGRESS') ...[
                   SizedBox(
                     width: double.infinity,
                     child: OutlinedButton.icon(
@@ -374,12 +395,12 @@ class BookingDetailScreen extends ConsumerWidget {
                         if (updated == true) ref.invalidate(bookingDetailProvider(bookingId));
                       },
                       icon: const Icon(Icons.edit_location_alt_rounded),
-                      label: const Text('Thay đổi điểm đón/trả'),
+                      label: const Text('Thay đổi điểm trả'),
                     ),
                   ),
                   const SizedBox(height: 16),
                 ],
-                
+
                 if (status == 'PENDING') ...[
                   GradientButton(
                     onPressed: () => _pay(context, ref),
@@ -405,21 +426,6 @@ class BookingDetailScreen extends ConsumerWidget {
                       ),
                     ),
                   ),
-                ],
-
-                if (status == 'CONFIRMED' || status == 'RENTING' || status == 'IN_PROGRESS') ...[
-                  GradientButton(
-                    onPressed: () => context.push('/cars/${booking['carId']}/tracking'),
-                    child: const Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.explore_rounded, color: Colors.white),
-                        SizedBox(width: 8),
-                        Text('Định vị xe', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 16)),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 16),
                 ],
 
                 if (status == 'RENTING' || status == 'IN_PROGRESS') ...[

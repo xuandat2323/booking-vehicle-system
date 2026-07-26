@@ -12,6 +12,7 @@ public record BookingCreateRequest(
         BigDecimal pickupLongitude,
         String dropoffAddress,
         BigDecimal dropoffLatitude,
-        BigDecimal dropoffLongitude
+        BigDecimal dropoffLongitude,
+        Long dropoffBranchId
 ) {
 }

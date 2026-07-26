@@ -10,8 +10,11 @@ import vehicle.booking.entity.enums.PaymentMethod;
 import vehicle.booking.entity.enums.PaymentStatus;
 import vehicle.booking.exception.*;
 import vehicle.booking.repository.*;
+import vehicle.booking.realtime.RealtimeEventHub;
 import vehicle.booking.service.EmailService;
+import vehicle.booking.service.NotificationService;
 import vehicle.booking.service.PaymentService;
+import vehicle.booking.entity.enums.NotificationType;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -31,6 +34,8 @@ public class PaymentServiceImpl implements PaymentService {
     private final BookingRepository bookingRepository;
     private final CarRepository carRepository;
     private final EmailService emailService;
+    private final RealtimeEventHub realtimeEventHub;
+    private final NotificationService notificationService;
 
     @Override
     public Page<PaymentSummaryResponse> getMyPayments(String currentUserPhone, Pageable pageable) {
@@ -94,6 +99,34 @@ public class PaymentServiceImpl implements PaymentService {
         carRepository.save(car);
 
         emailService.sendPaymentConfirmation(payment);
+        if (booking.getUser() != null) {
+            realtimeEventHub.publishBookingUpdated(
+                    booking.getUser().getUserId(),
+                    booking.getBookingId(),
+                    booking.getStatus().name());
+            if (result == PaymentStatus.SUCCESS) {
+                notificationService.send(booking.getUser(),
+                        "Đã đặt cọc thành công",
+                        "Đơn #" + booking.getBookingId()
+                                + " đã nhận cọc 30%. Vui lòng chờ admin xác nhận giữ xe.",
+                        NotificationType.BOOKING_DEPOSIT_PAID, booking.getBookingId());
+                notificationService.sendToAdmins(
+                        "Có đơn chờ duyệt",
+                        "Đơn #" + booking.getBookingId() + " của khách "
+                                + booking.getUser().getName() + " đã đặt cọc, cần xác nhận.",
+                        NotificationType.BOOKING_DEPOSIT_PAID, booking.getBookingId());
+            } else {
+                notificationService.send(booking.getUser(),
+                        "Đơn đã bị hủy",
+                        "Thanh toán đơn #" + booking.getBookingId()
+                                + " thất bại nên đơn đã bị hủy.",
+                        NotificationType.BOOKING_CANCELLED, booking.getBookingId());
+                notificationService.sendToAdmins(
+                        "Đơn bị hủy",
+                        "Đơn #" + booking.getBookingId() + " hủy do thanh toán thất bại.",
+                        NotificationType.BOOKING_CANCELLED, booking.getBookingId());
+            }
+        }
 
         return mapToResponse(payment);
     }

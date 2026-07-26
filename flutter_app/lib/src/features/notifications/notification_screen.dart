@@ -22,8 +22,14 @@ IconData _notifIcon(String? type) {
   switch (type) {
     case 'BOOKING_CREATED':
       return Icons.directions_car;
+    case 'BOOKING_DEPOSIT_PAID':
+      return Icons.payments_rounded;
     case 'BOOKING_CONFIRMED':
       return Icons.check_circle;
+    case 'BOOKING_RENTING':
+      return Icons.directions_car_filled_rounded;
+    case 'BOOKING_RETURNED':
+      return Icons.keyboard_return_rounded;
     case 'BOOKING_CANCELLED':
       return Icons.cancel;
     case 'BOOKING_COMPLETED':
@@ -41,8 +47,14 @@ Color _notifColor(String? type) {
   switch (type) {
     case 'BOOKING_CREATED':
       return Colors.blue;
+    case 'BOOKING_DEPOSIT_PAID':
+      return Colors.orange;
     case 'BOOKING_CONFIRMED':
       return Colors.green;
+    case 'BOOKING_RENTING':
+      return const Color(0xFF6750A4);
+    case 'BOOKING_RETURNED':
+      return Colors.teal;
     case 'BOOKING_CANCELLED':
       return Colors.red;
     case 'BOOKING_COMPLETED':

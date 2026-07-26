@@ -198,6 +198,11 @@ public enum ErrorCode {
             "USER chỉ có thể hủy booking khi trạng thái là PENDING. Trạng thái hiện tại: %s",
             HttpStatus.BAD_REQUEST
     ),
+    BOOKING_LOCATION_UPDATE_NOT_ALLOWED(
+            "BOOKING_LOCATION_UPDATE_NOT_ALLOWED",
+            "Không thể cập nhật %s khi đơn đang ở trạng thái %s.",
+            HttpStatus.BAD_REQUEST
+    ),
     BOOKING_ACCESS_DENIED(
             "BOOKING_ACCESS_DENIED",
             "Bạn không có quyền truy cập booking này.",

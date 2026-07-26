@@ -2,7 +2,10 @@ package vehicle.booking.entity.enums;
 
 public enum NotificationType {
     BOOKING_CREATED,
+    BOOKING_DEPOSIT_PAID,
     BOOKING_CONFIRMED,
+    BOOKING_RENTING,
+    BOOKING_RETURNED,
     BOOKING_CANCELLED,
     BOOKING_COMPLETED,
     PAYMENT_SUCCESS,

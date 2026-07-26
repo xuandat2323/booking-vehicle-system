@@ -5,6 +5,7 @@ import java.math.BigDecimal;
 public record BookingLocationRequest(
         String address,
         BigDecimal latitude,
-        BigDecimal longitude
+        BigDecimal longitude,
+        Long branchId
 ) {
 }

@@ -13,7 +13,15 @@ class PickedLocation {
   final double lat;
   final double lng;
 
-  const PickedLocation({required this.address, required this.lat, required this.lng});
+  /// Chi nhánh GoRento tương ứng (nếu điểm được chọn từ danh sách chi nhánh).
+  final int? branchId;
+
+  const PickedLocation({
+    required this.address,
+    required this.lat,
+    required this.lng,
+    this.branchId,
+  });
 }
 
 class LocationPickerDialog extends StatefulWidget {

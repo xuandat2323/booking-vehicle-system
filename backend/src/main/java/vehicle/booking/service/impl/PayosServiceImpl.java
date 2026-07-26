@@ -7,7 +7,10 @@ import vehicle.booking.entity.enums.BookingStatus;
 import vehicle.booking.exception.AppException;
 import vehicle.booking.exception.ErrorCode;
 import vehicle.booking.repository.BookingRepository;
+import vehicle.booking.realtime.RealtimeEventHub;
+import vehicle.booking.service.NotificationService;
 import vehicle.booking.service.PayosService;
+import vehicle.booking.entity.enums.NotificationType;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.hibernate.Hibernate;
@@ -35,6 +38,8 @@ public class PayosServiceImpl implements PayosService {
     private final BookingRepository bookingRepository;
     private final PayosConfig payosConfig;
     private final PayOS payOS;
+    private final RealtimeEventHub realtimeEventHub;
+    private final NotificationService notificationService;
 
     @Override
     @Transactional(readOnly = true)
@@ -204,6 +209,23 @@ public class PayosServiceImpl implements PayosService {
         if (booking.getStatus() == BookingStatus.PENDING) {
             booking.setStatus(BookingStatus.DEPOSIT_PAID);
             bookingRepository.save(booking);
+            Hibernate.initialize(booking.getUser());
+            if (booking.getUser() != null) {
+                realtimeEventHub.publishBookingUpdated(
+                        booking.getUser().getUserId(),
+                        booking.getBookingId(),
+                        BookingStatus.DEPOSIT_PAID.name());
+                notificationService.send(booking.getUser(),
+                        "Đã đặt cọc thành công",
+                        "Đơn #" + booking.getBookingId()
+                                + " đã nhận cọc 30%. Vui lòng chờ admin xác nhận giữ xe.",
+                        NotificationType.BOOKING_DEPOSIT_PAID, booking.getBookingId());
+                notificationService.sendToAdmins(
+                        "Có đơn chờ duyệt",
+                        "Đơn #" + booking.getBookingId() + " của khách "
+                                + booking.getUser().getName() + " đã đặt cọc, cần xác nhận.",
+                        NotificationType.BOOKING_DEPOSIT_PAID, booking.getBookingId());
+            }
             log.info("Booking {} marked DEPOSIT_PAID via PayOS", booking.getBookingId());
         }
     }

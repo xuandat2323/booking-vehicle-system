@@ -8,11 +8,13 @@ import org.springframework.data.repository.query.Param;
 
 import vehicle.booking.entity.User;
 
+import java.util.List;
 import java.util.Optional;
 
 public interface UserRepository extends JpaRepository<User, Long> {
     Optional<User> findByPhone(String phone);
     Optional<User> findByEmail(String email);
+    List<User> findByRoleIgnoreCase(String role);
 
     @Query("""
     SELECT u FROM User u

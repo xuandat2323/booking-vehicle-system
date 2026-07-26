@@ -13,6 +13,9 @@ import vehicle.booking.exception.AppException;
 import vehicle.booking.exception.ErrorCode;
 import vehicle.booking.repository.NotificationRepository;
 import vehicle.booking.repository.UserRepository;
+import vehicle.booking.realtime.RealtimeEventHub;
+
+import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -21,8 +24,12 @@ public class NotificationService {
     private final NotificationRepository notificationRepository;
     private final UserRepository userRepository;
     private final FcmService fcmService;
+    private final RealtimeEventHub realtimeEventHub;
 
     public void send(User user, String title, String message, NotificationType type, Long referenceId) {
+        if (user == null) {
+            return;
+        }
         Notification n = new Notification();
         n.setUser(user);
         n.setTitle(title);
@@ -33,6 +40,15 @@ public class NotificationService {
 
         // Push to device if FCM token is registered
         fcmService.send(user.getFcmToken(), title, message);
+        realtimeEventHub.publishNotificationCreated(user.getUserId(), n.getNotificationId());
+    }
+
+    /** Gửi thông báo tới toàn bộ tài khoản ADMIN đang hoạt động. */
+    public void sendToAdmins(String title, String message, NotificationType type, Long referenceId) {
+        List<User> admins = userRepository.findByRoleIgnoreCase("ADMIN");
+        for (User admin : admins) {
+            send(admin, title, message, type, referenceId);
+        }
     }
 
     public Page<NotificationResponse> getMyNotifications(String phone, Pageable pageable) {

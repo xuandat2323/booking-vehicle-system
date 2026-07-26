@@ -45,6 +45,7 @@ class _BookingCreateScreenState extends ConsumerState<BookingCreateScreen> {
       final lat = (car['latitude'] as num?)?.toDouble();
       final lng = (car['longitude'] as num?)?.toDouble();
       final branchName = car['branchName']?.toString() ?? '';
+      final branchId = (car['branchId'] as num?)?.toInt();
       if (lat != null &&
           lng != null &&
           (loc.isNotEmpty || branchName.isNotEmpty)) {
@@ -52,15 +53,19 @@ class _BookingCreateScreenState extends ConsumerState<BookingCreateScreen> {
             ? '$branchName — $loc'
             : (branchName.isNotEmpty ? branchName : loc);
         setState(() {
+          // Điểm đón cố định theo chi nhánh của xe (không cho đổi).
           _pickupLocation = PickedLocation(
             address: address,
             lat: lat,
             lng: lng,
+            branchId: branchId,
           );
+          // Mặc định trả tại chính chi nhánh đón, khách có thể đổi.
           _dropoffLocation = PickedLocation(
             address: address,
             lat: lat,
             lng: lng,
+            branchId: branchId,
           );
         });
       }
@@ -120,6 +125,8 @@ class _BookingCreateScreenState extends ConsumerState<BookingCreateScreen> {
             'dropoffAddress': _dropoffLocation!.address,
             'dropoffLatitude': _dropoffLocation!.lat,
             'dropoffLongitude': _dropoffLocation!.lng,
+            if (_dropoffLocation!.branchId != null)
+              'dropoffBranchId': _dropoffLocation!.branchId,
           },
         },
       );
@@ -401,24 +408,18 @@ class _BookingCreateScreenState extends ConsumerState<BookingCreateScreen> {
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              'Chọn chi nhánh nhận / trả xe (3 cơ sở GoRento)',
+                              'Điểm đón cố định tại chi nhánh của xe. '
+                              'Bạn có thể chọn chi nhánh trả xe khác.',
                               style: tt.bodyMedium,
                             ),
                             const SizedBox(height: 20),
                             _LocationRow(
                               icon: Icons.my_location_rounded,
-                              label: 'Điểm đón',
+                              label: 'Điểm đón (cố định theo xe)',
                               address: _pickupLocation?.address,
+                              hint: 'Đang tải chi nhánh của xe...',
                               color: cs.secondaryContainer,
-                              onTap: () async {
-                                final result = await BranchLocationPicker.show(
-                                  context,
-                                  title: 'Chọn chi nhánh đón xe',
-                                  initialLocation: _pickupLocation,
-                                );
-                                if (result != null)
-                                  setState(() => _pickupLocation = result);
-                              },
+                              locked: true,
                             ),
                             const SizedBox(height: 12),
                             _LocationRow(
@@ -432,8 +433,9 @@ class _BookingCreateScreenState extends ConsumerState<BookingCreateScreen> {
                                   title: 'Chọn chi nhánh trả xe',
                                   initialLocation: _dropoffLocation,
                                 );
-                                if (result != null)
+                                if (result != null) {
                                   setState(() => _dropoffLocation = result);
+                                }
                               },
                             ),
                           ],
@@ -469,16 +471,20 @@ class _LocationRow extends StatelessWidget {
   const _LocationRow({
     required this.icon,
     required this.label,
-    required this.onTap,
     required this.color,
+    this.onTap,
     this.address,
+    this.hint,
+    this.locked = false,
   });
 
   final IconData icon;
   final String label;
   final String? address;
   final Color color;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
+  final String? hint;
+  final bool locked;
 
   @override
   Widget build(BuildContext context) {
@@ -487,7 +493,7 @@ class _LocationRow extends StatelessWidget {
     final hasLocation = address != null && address!.isNotEmpty;
 
     return InkWell(
-      onTap: onTap,
+      onTap: locked ? null : onTap,
       borderRadius: BorderRadius.circular(16),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
@@ -521,7 +527,9 @@ class _LocationRow extends StatelessWidget {
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    hasLocation ? address! : 'Nhấn để chọn trên bản đồ',
+                    hasLocation
+                        ? address!
+                        : (hint ?? 'Nhấn để chọn chi nhánh'),
                     style: tt.bodyMedium?.copyWith(
                       color: hasLocation ? cs.onSurface : cs.outline,
                       fontWeight: hasLocation
@@ -534,7 +542,11 @@ class _LocationRow extends StatelessWidget {
                 ],
               ),
             ),
-            Icon(Icons.chevron_right_rounded, color: cs.outline, size: 20),
+            Icon(
+              locked ? Icons.lock_outline_rounded : Icons.chevron_right_rounded,
+              color: cs.outline,
+              size: 20,
+            ),
           ],
         ),
       ),

@@ -5,21 +5,32 @@ import '../../core/network/dio_provider.dart';
 import 'branch_location_picker.dart';
 import 'location_picker_dialog.dart';
 
-/// Đổi điểm đón/trả — chỉ chọn trong 3 chi nhánh.
+/// Điểm nhận cố định theo xe; chỉ cho đổi điểm trả trong các trạng thái cho phép.
 class BookingPickupDropoffScreen extends ConsumerStatefulWidget {
   const BookingPickupDropoffScreen({super.key, required this.bookingId});
 
   final String bookingId;
 
   @override
-  ConsumerState<BookingPickupDropoffScreen> createState() => _BookingPickupDropoffScreenState();
+  ConsumerState<BookingPickupDropoffScreen> createState() =>
+      _BookingPickupDropoffScreenState();
 }
 
-class _BookingPickupDropoffScreenState extends ConsumerState<BookingPickupDropoffScreen> {
+class _BookingPickupDropoffScreenState
+    extends ConsumerState<BookingPickupDropoffScreen> {
   PickedLocation? _pickup;
   PickedLocation? _dropoff;
+  String _status = '';
+  bool _dropoffChanged = false;
   bool _loadingData = true;
   bool _saving = false;
+
+  bool get _canEditDropoff =>
+      _status == 'PENDING' ||
+      _status == 'DEPOSIT_PAID' ||
+      _status == 'CONFIRMED' ||
+      _status == 'RENTING' ||
+      _status == 'IN_PROGRESS';
 
   @override
   void initState() {
@@ -34,15 +45,20 @@ class _BookingPickupDropoffScreenState extends ConsumerState<BookingPickupDropof
       final booking = response.data['data'] as Map<String, dynamic>;
       if (!mounted) return;
       setState(() {
+        _status = booking['status']?.toString() ?? '';
         final pAddr = booking['pickupAddress']?.toString();
-        final pLat = double.tryParse(booking['pickupLatitude']?.toString() ?? '');
-        final pLng = double.tryParse(booking['pickupLongitude']?.toString() ?? '');
+        final pLat =
+            double.tryParse(booking['pickupLatitude']?.toString() ?? '');
+        final pLng =
+            double.tryParse(booking['pickupLongitude']?.toString() ?? '');
         if (pAddr != null && pAddr.isNotEmpty && pLat != null && pLng != null) {
           _pickup = PickedLocation(address: pAddr, lat: pLat, lng: pLng);
         }
         final dAddr = booking['dropoffAddress']?.toString();
-        final dLat = double.tryParse(booking['dropoffLatitude']?.toString() ?? '');
-        final dLng = double.tryParse(booking['dropoffLongitude']?.toString() ?? '');
+        final dLat =
+            double.tryParse(booking['dropoffLatitude']?.toString() ?? '');
+        final dLng =
+            double.tryParse(booking['dropoffLongitude']?.toString() ?? '');
         if (dAddr != null && dAddr.isNotEmpty && dLat != null && dLng != null) {
           _dropoff = PickedLocation(address: dAddr, lat: dLat, lng: dLng);
         }
@@ -54,32 +70,33 @@ class _BookingPickupDropoffScreenState extends ConsumerState<BookingPickupDropof
   }
 
   Future<void> _save() async {
-    if (_pickup == null && _dropoff == null) {
+    if (!_canEditDropoff) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Vui lòng chọn chi nhánh đón hoặc trả')),
+        const SnackBar(content: Text('Không thể đổi điểm trả ở trạng thái hiện tại')),
+      );
+      return;
+    }
+    if (!_dropoffChanged || _dropoff == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Vui lòng chọn chi nhánh trả xe')),
       );
       return;
     }
     setState(() => _saving = true);
     try {
       final dio = ref.read(dioProvider);
-      if (_pickup != null) {
-        await dio.put('/api/bookings/${widget.bookingId}/pickup-location', data: {
-          'address': _pickup!.address,
-          'latitude': _pickup!.lat,
-          'longitude': _pickup!.lng,
-        });
-      }
-      if (_dropoff != null) {
-        await dio.put('/api/bookings/${widget.bookingId}/dropoff-location', data: {
+      await dio.put(
+        '/api/bookings/${widget.bookingId}/dropoff-location',
+        data: {
           'address': _dropoff!.address,
           'latitude': _dropoff!.lat,
           'longitude': _dropoff!.lng,
-        });
-      }
+          if (_dropoff!.branchId != null) 'branchId': _dropoff!.branchId,
+        },
+      );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Đã cập nhật điểm đón/trả')),
+          const SnackBar(content: Text('Đã cập nhật điểm trả')),
         );
         Navigator.of(context).pop(true);
       }
@@ -100,53 +117,59 @@ class _BookingPickupDropoffScreenState extends ConsumerState<BookingPickupDropof
     final tt = Theme.of(context).textTheme;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Điểm đón / trả')),
+      appBar: AppBar(title: const Text('Điểm nhận / trả')),
       body: _loadingData
           ? const Center(child: CircularProgressIndicator())
           : ListView(
               padding: const EdgeInsets.all(20),
               children: [
                 Text(
-                  'Chỉ nhận và trả xe tại chi nhánh GoRento.',
+                  'Điểm nhận cố định theo chi nhánh của xe. '
+                  'Bạn chỉ có thể đổi điểm trả trước khi xác nhận trả xe.',
                   style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
                 ),
                 const SizedBox(height: 20),
                 _BranchRow(
-                  label: 'Chi nhánh đón',
+                  label: 'Chi nhánh nhận xe (cố định)',
                   value: _pickup?.address,
-                  onTap: () async {
-                    final r = await BranchLocationPicker.show(
-                      context,
-                      title: 'Chọn chi nhánh đón',
-                      initialLocation: _pickup,
-                    );
-                    if (r != null) setState(() => _pickup = r);
-                  },
+                  locked: true,
+                  onTap: () {},
                 ),
                 const SizedBox(height: 12),
                 _BranchRow(
                   label: 'Chi nhánh trả',
                   value: _dropoff?.address,
+                  locked: !_canEditDropoff,
                   onTap: () async {
                     final r = await BranchLocationPicker.show(
                       context,
                       title: 'Chọn chi nhánh trả',
                       initialLocation: _dropoff,
                     );
-                    if (r != null) setState(() => _dropoff = r);
+                    if (r != null) {
+                      setState(() {
+                        _dropoff = r;
+                        _dropoffChanged = true;
+                      });
+                    }
                   },
                 ),
                 const SizedBox(height: 28),
                 FilledButton(
-                  onPressed: _saving ? null : _save,
-                  style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+                  onPressed: _saving || !_canEditDropoff ? null : _save,
+                  style: FilledButton.styleFrom(
+                    minimumSize: const Size.fromHeight(48),
+                  ),
                   child: _saving
                       ? const SizedBox(
                           width: 22,
                           height: 22,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
                         )
-                      : const Text('Lưu'),
+                      : const Text('Lưu điểm trả'),
                 ),
               ],
             ),
@@ -159,11 +182,13 @@ class _BranchRow extends StatelessWidget {
     required this.label,
     required this.onTap,
     this.value,
+    this.locked = false,
   });
 
   final String label;
   final String? value;
   final VoidCallback onTap;
+  final bool locked;
 
   @override
   Widget build(BuildContext context) {
@@ -172,7 +197,7 @@ class _BranchRow extends StatelessWidget {
     final has = value != null && value!.isNotEmpty;
 
     return InkWell(
-      onTap: onTap,
+      onTap: locked ? null : onTap,
       borderRadius: BorderRadius.circular(16),
       child: Container(
         padding: const EdgeInsets.all(16),
@@ -189,7 +214,10 @@ class _BranchRow extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(label, style: tt.labelMedium?.copyWith(color: cs.onSurfaceVariant)),
+                  Text(
+                    label,
+                    style: tt.labelMedium?.copyWith(color: cs.onSurfaceVariant),
+                  ),
                   const SizedBox(height: 4),
                   Text(
                     has ? value! : 'Chạm để chọn chi nhánh',
@@ -201,7 +229,11 @@ class _BranchRow extends StatelessWidget {
                 ],
               ),
             ),
-            const Icon(Icons.chevron_right_rounded),
+            Icon(
+              locked
+                  ? Icons.lock_outline_rounded
+                  : Icons.chevron_right_rounded,
+            ),
           ],
         ),
       ),
