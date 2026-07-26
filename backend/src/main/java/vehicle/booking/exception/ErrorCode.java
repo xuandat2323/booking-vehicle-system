@@ -13,6 +13,11 @@ public enum ErrorCode {
             "Yêu cầu không hợp lệ.",
             HttpStatus.BAD_REQUEST
     ),
+    VERIFICATION_CCCD_FRONT_REQUIRED(
+            "VERIFICATION_CCCD_FRONT_REQUIRED",
+            "Chưa có ảnh CCCD mặt trước đã xác minh. Vui lòng upload lại CCCD mặt trước trước khi selfie.",
+            HttpStatus.BAD_REQUEST
+    ),
     VALIDATION_ERROR(
             "VALIDATION_ERROR",
             "Dữ liệu đầu vào không hợp lệ: %s",

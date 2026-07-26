@@ -49,7 +49,7 @@ enum _Step {
   face(
     icon: Icons.face_rounded,
     label: 'Xác thực khuôn mặt',
-    hint: 'Chụp selfie nhìn thẳng, đủ ánh sáng, không đeo kính',
+    hint: 'Chỉ cần selfie — hệ thống so với CCCD mặt trước đã xác minh',
     endpoint: '/api/verification/face',
     fileParam: 'selfie',
     needsIdRef: true,
@@ -120,15 +120,25 @@ class _VerificationScreenState extends ConsumerState<VerificationScreen> {
       }
 
       if (step == _Step.face) {
-        if (_cccdFrontBytes == null) {
-          _showSnack('Vui lòng upload CCCD mặt trước trước khi xác thực khuôn mặt',
-              Colors.orange);
+        final status = ref.read(verificationStatusProvider).valueOrNull;
+        final cccdOk = status?['cccdVerified'] == true;
+        final cccdStored = status?['cccdFrontStored'] == true;
+        // Server đã lưu CCCD mặt trước khi xác minh — chỉ cần selfie.
+        // Giữ gửi kèm idImage nếu còn trong RAM (cùng phiên) để chắc chắn.
+        if (_cccdFrontBytes == null && !cccdOk && !cccdStored) {
+          _showSnack(
+            'Vui lòng upload CCCD mặt trước trước khi xác thực khuôn mặt',
+            Colors.orange,
+          );
           return;
         }
         form = FormData.fromMap({
           'selfie': MultipartFile.fromBytes(bytes, filename: picked.name),
-          'idImage': MultipartFile.fromBytes(_cccdFrontBytes!,
-              filename: _cccdFrontName ?? 'cccd.jpg'),
+          if (_cccdFrontBytes != null)
+            'idImage': MultipartFile.fromBytes(
+              _cccdFrontBytes!,
+              filename: _cccdFrontName ?? 'cccd.jpg',
+            ),
         });
       } else {
         form = FormData.fromMap({
@@ -375,7 +385,8 @@ class _VerificationScreenState extends ConsumerState<VerificationScreen> {
                             0.0,
                     uploading: _uploading[_Step.face]!,
                     previewBytes: _stepPreviews[_Step.face],
-                    cccdFrontUploaded: status['cccdVerified'] == true,
+                    cccdFrontUploaded: status['cccdVerified'] == true ||
+                        status['cccdFrontStored'] == true,
                     onTap: () => _showSourcePicker(_Step.face),
                   ),
                   const SizedBox(height: 28),
@@ -903,6 +914,18 @@ class _FaceStepCard extends StatelessWidget {
             Expanded(
               child: Text('Hoàn tất CCCD mặt trước trước',
                   style: tt.bodySmall?.copyWith(color: cs.outline)),
+            ),
+          ]),
+        ] else if (!verified) ...[
+          const SizedBox(height: 10),
+          Row(children: [
+            Icon(Icons.check_circle_outline_rounded, size: 14, color: cs.primary),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                'Sẽ so khớp với CCCD mặt trước đã xác minh — chỉ cần chụp selfie',
+                style: tt.bodySmall?.copyWith(color: cs.primary),
+              ),
             ),
           ]),
         ],

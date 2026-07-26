@@ -8,6 +8,7 @@ import vehicle.booking.exception.AppException;
 import vehicle.booking.exception.ErrorCode;
 import vehicle.booking.repository.UserRepository;
 import vehicle.booking.repository.UserVerificationRepository;
+import vehicle.booking.service.ekyc.EkycDocumentStorage;
 import vehicle.booking.service.ekyc.EkycService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -27,13 +28,14 @@ import java.util.Map;
 public class VerificationController {
 
     /** Face cosine similarity tối thiểu để coi là khớp (0..1). */
-    private static final float FACE_MATCH_THRESHOLD = 0.65f;
+    private static final float FACE_MATCH_THRESHOLD = 0.58f;
     /** Liveness score tối thiểu. */
     private static final float LIVENESS_THRESHOLD = 0.55f;
 
     private final UserRepository userRepository;
     private final UserVerificationRepository verificationRepository;
     private final EkycService ekycService;
+    private final EkycDocumentStorage ekycDocumentStorage;
 
     @GetMapping("/status")
     public ResponseEntity<ApiResponse<Map<String, Object>>> getStatus(
@@ -51,7 +53,8 @@ public class VerificationController {
                             "faceMatchVerified", false,
                             "faceMatchScore", 0.0,
                             "livenessVerified", false,
-                            "livenessScore", 0.0)));
+                            "livenessScore", 0.0,
+                            "cccdFrontStored", false)));
         }
         Map<String, Object> result = new HashMap<>();
         result.put("status", v.getStatus());
@@ -71,6 +74,7 @@ public class VerificationController {
         result.put("cccdNumber", v.getCccdNumber() != null ? v.getCccdNumber() : "");
         result.put("birthDay", v.getBirthDay() != null ? v.getBirthDay() : "");
         result.put("licenseClass", v.getLicenseClass() != null ? v.getLicenseClass() : "");
+        result.put("cccdFrontStored", ekycDocumentStorage.hasCccdFront(user.getUserId()));
         return ResponseEntity.ok(new ApiResponse<>(true, "Lấy trạng thái thành công", result));
     }
 
@@ -113,6 +117,10 @@ public class VerificationController {
             ocrMsg = "Không đọc được số CCCD 12 số — chụp rõ phần số căn cước";
         }
         v.setCccdVerified(verified);
+        if (verified) {
+            // Giữ ảnh để bước selfie so khớp, không bắt user chọn lại CCCD.
+            ekycDocumentStorage.saveCccdFront(user.getUserId(), image);
+        }
 
         updateOverallStatus(v);
         verificationRepository.save(v);
@@ -122,6 +130,7 @@ public class VerificationController {
         payload.put("isSpoofed", isSpoofed);
         payload.put("name", name != null ? name : "");
         payload.put("id", id != null ? id : "");
+        payload.put("cccdFrontStored", verified);
         payload.put("message", verified ? "Xác minh CCCD thành công" : ocrMsg);
 
         return ResponseEntity.ok(new ApiResponse<>(
@@ -278,11 +287,17 @@ public class VerificationController {
     @PostMapping("/face")
     public ResponseEntity<ApiResponse<Map<String, Object>>> verifyFace(
             @RequestParam("selfie") MultipartFile selfie,
-            @RequestParam("idImage") MultipartFile idImage,
+            @RequestParam(value = "idImage", required = false) MultipartFile idImage,
             @AuthenticationPrincipal UserDetails userDetails) {
         User user = getUser(userDetails);
         requireImage(selfie);
-        requireImage(idImage);
+
+        MultipartFile idRef = (idImage != null && !idImage.isEmpty())
+                ? idImage
+                : ekycDocumentStorage.loadCccdFront(user.getUserId());
+        if (idRef == null || idRef.isEmpty()) {
+            throw new AppException(ErrorCode.VERIFICATION_CCCD_FRONT_REQUIRED);
+        }
 
         Map<String, Object> livenessResult = ekycService.livenessCheck(selfie);
         boolean isLive = false;
@@ -297,7 +312,7 @@ public class VerificationController {
         }
         boolean livenessOk = isLive && livenessScore >= LIVENESS_THRESHOLD;
 
-        Map<String, Object> faceMatchResult = ekycService.faceMatch(selfie, idImage);
+        Map<String, Object> faceMatchResult = ekycService.faceMatch(selfie, idRef);
         float faceMatchScore = 0f;
         boolean providerVerified = false;
         if (faceMatchResult.get("data") instanceof Map<?,?> fd) {
