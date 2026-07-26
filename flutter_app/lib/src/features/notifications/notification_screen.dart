@@ -156,6 +156,8 @@ class NotificationScreen extends ConsumerWidget {
                                         fontWeight: isRead ? FontWeight.normal : FontWeight.bold,
                                         fontSize: 14,
                                       ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
                                     ),
                                   ),
                                   if (!isRead)

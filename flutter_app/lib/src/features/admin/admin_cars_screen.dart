@@ -197,6 +197,7 @@ class _AdminCarsScreenState extends ConsumerState<AdminCarsScreen> {
                           onDelete: () => _confirmDelete(context, ref, car),
                           onChangeStatus: (status) =>
                               _changeStatus(context, car, status),
+                          onViewReviews: () => _showCarReviews(context, car),
                         ),
                       );
                     },
@@ -281,6 +282,40 @@ class _AdminCarsScreenState extends ConsumerState<AdminCarsScreen> {
     } catch (e) {
       if (context.mounted) ToastUtils.showError(context, e);
     }
+  }
+
+  Future<void> _showCarReviews(
+    BuildContext context,
+    Map<String, dynamic> car,
+  ) async {
+    final carId = car['id']?.toString();
+    if (carId == null || carId.isEmpty) return;
+    final carName = carDisplayTitle(
+      car['brand']?.toString(),
+      car['name']?.toString(),
+    );
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useRootNavigator: true,
+      showDragHandle: true,
+      builder: (sheetContext) {
+        return DraggableScrollableSheet(
+          expand: false,
+          initialChildSize: 0.65,
+          minChildSize: 0.4,
+          maxChildSize: 0.92,
+          builder: (context, scrollController) {
+            return _AdminCarReviewsSheet(
+              carId: carId,
+              carName: carName,
+              scrollController: scrollController,
+            );
+          },
+        );
+      },
+    );
   }
 
   Future<void> _confirmDelete(
@@ -594,12 +629,39 @@ class _CarCard extends StatelessWidget {
     required this.onEdit,
     required this.onDelete,
     required this.onChangeStatus,
+    required this.onViewReviews,
   });
 
   final Map<String, dynamic> car;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
   final ValueChanged<String> onChangeStatus;
+  final VoidCallback onViewReviews;
+
+  PopupMenuItem<String> _menuItem(
+    String value,
+    IconData icon,
+    String label, {
+    bool isDanger = false,
+  }) {
+    final color = isDanger ? Colors.red : null;
+    return PopupMenuItem<String>(
+      value: value,
+      child: Row(
+        children: [
+          Icon(icon, size: 20, color: color),
+          const SizedBox(width: 12),
+          Flexible(
+            child: Text(
+              label,
+              style: TextStyle(color: color),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -663,88 +725,75 @@ class _CarCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          child: Tooltip(
-                            message: title,
-                            child: Text(
-                              title,
-                              style: tt.titleSmall?.copyWith(fontWeight: FontWeight.w700),
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: AppSpacing.xs),
-                        _StatusBadge(label: statusLabel, color: statusColor),
-                      ],
+                    Tooltip(
+                      message: title,
+                      child: Text(
+                        title,
+                        style: tt.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
+                    const SizedBox(height: AppSpacing.xs),
+                    _StatusBadge(label: statusLabel, color: statusColor),
                     const SizedBox(height: AppSpacing.xs),
                     Text(
                       licensePlate,
                       style: tt.bodySmall?.copyWith(color: cs.outline, fontWeight: FontWeight.w600),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                     if (location.isNotEmpty) ...[
                       const SizedBox(height: AppSpacing.xs),
                       Text(
                         location,
                         style: tt.bodySmall?.copyWith(color: cs.outline),
+                        maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
                     ],
                     const SizedBox(height: AppSpacing.sm),
                     Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text(
-                          FormatUtils.vndPerDay(car['pricePerDay']),
-                          style: tt.labelMedium?.copyWith(
-                            color: cs.primary,
-                            fontWeight: FontWeight.w700,
+                        Expanded(
+                          child: Text(
+                            FormatUtils.vndPerDay(car['pricePerDay']),
+                            style: tt.labelMedium?.copyWith(
+                              color: cs.primary,
+                              fontWeight: FontWeight.w700,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            if (status == 'AVAILABLE' || status == 'MAINTENANCE')
-                              IconButton(
-                                visualDensity: VisualDensity.compact,
-                                icon: Icon(
-                                  status == 'MAINTENANCE'
-                                      ? Icons.play_circle_outline_rounded
-                                      : Icons.build_outlined,
-                                  size: 20,
-                                  color: cs.secondary,
-                                ),
-                                onPressed: () => onChangeStatus(
-                                  status == 'MAINTENANCE' ? 'AVAILABLE' : 'MAINTENANCE',
-                                ),
-                                tooltip: status == 'MAINTENANCE'
-                                    ? 'Đưa về sẵn sàng cho thuê'
-                                    : 'Chuyển sang bảo dưỡng',
-                                padding: EdgeInsets.zero,
-                                constraints: const BoxConstraints(),
-                              ),
-                            const SizedBox(width: AppSpacing.sm),
-                            IconButton(
-                              visualDensity: VisualDensity.compact,
-                              icon: Icon(Icons.edit_outlined, size: 20, color: cs.primary),
-                              onPressed: onEdit,
-                              tooltip: 'Sửa xe',
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(),
-                            ),
-                            const SizedBox(width: AppSpacing.sm),
-                            IconButton(
-                              visualDensity: VisualDensity.compact,
-                              icon: Icon(Icons.delete_outline_rounded, size: 20, color: cs.error),
-                              onPressed: onDelete,
-                              tooltip: 'Xóa xe',
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(),
-                            ),
+                        PopupMenuButton<String>(
+                          tooltip: 'Thêm thao tác',
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                          iconSize: 20,
+                          splashRadius: 18,
+                          icon: Icon(Icons.more_vert_rounded, color: cs.onSurfaceVariant),
+                          onSelected: (value) {
+                            if (value == 'reviews') {
+                              onViewReviews();
+                            } else if (value == 'edit') {
+                              onEdit();
+                            } else if (value == 'delete') {
+                              onDelete();
+                            } else if (value == 'maintenance') {
+                              onChangeStatus('MAINTENANCE');
+                            } else if (value == 'available') {
+                              onChangeStatus('AVAILABLE');
+                            }
+                          },
+                          itemBuilder: (context) => [
+                            _menuItem('reviews', Icons.rate_review_outlined, 'Xem đánh giá'),
+                            _menuItem('edit', Icons.edit_outlined, 'Sửa xe'),
+                            if (status == 'AVAILABLE')
+                              _menuItem('maintenance', Icons.build_outlined, 'Chuyển bảo dưỡng'),
+                            if (status == 'MAINTENANCE')
+                              _menuItem('available', Icons.play_circle_outline_rounded, 'Đưa về sẵn sàng'),
+                            _menuItem('delete', Icons.delete_outline_rounded, 'Xóa xe', isDanger: true),
                           ],
                         ),
                       ],
@@ -790,10 +839,246 @@ class _StatusBadge extends StatelessWidget {
       ),
       child: Text(
         label,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
         style: Theme.of(context).textTheme.labelSmall?.copyWith(
               color: color,
               fontWeight: FontWeight.w700,
             ),
+      ),
+    );
+  }
+}
+
+class _AdminCarReviewsSheet extends ConsumerStatefulWidget {
+  const _AdminCarReviewsSheet({
+    required this.carId,
+    required this.carName,
+    required this.scrollController,
+  });
+
+  final String carId;
+  final String carName;
+  final ScrollController scrollController;
+
+  @override
+  ConsumerState<_AdminCarReviewsSheet> createState() =>
+      _AdminCarReviewsSheetState();
+}
+
+class _AdminCarReviewsSheetState extends ConsumerState<_AdminCarReviewsSheet> {
+  late Future<List<Map<String, dynamic>>> _reviewsFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _reviewsFuture = _loadReviews();
+  }
+
+  Future<List<Map<String, dynamic>>> _loadReviews() async {
+    final dio = ref.read(dioProvider);
+    final response = await dio.get(
+      '/api/reviews/car/${widget.carId}',
+      queryParameters: {'page': 0, 'size': 50},
+    );
+    final data = response.data['data'];
+    if (data is Map<String, dynamic>) {
+      final content = data['content'];
+      if (content is List) {
+        return content.cast<Map<String, dynamic>>();
+      }
+    }
+    if (data is List) {
+      return data.cast<Map<String, dynamic>>();
+    }
+    return [];
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.page,
+        0,
+        AppSpacing.page,
+        AppSpacing.page,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Đánh giá xe',
+            style: tt.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: AppSpacing.xs),
+          Text(
+            widget.carName,
+            style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
+          ),
+          const SizedBox(height: AppSpacing.md),
+          Expanded(
+            child: FutureBuilder<List<Map<String, dynamic>>>(
+              future: _reviewsFuture,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                if (snapshot.hasError) {
+                  return Center(
+                    child: Text(
+                      ToastUtils.mapError(snapshot.error!),
+                      textAlign: TextAlign.center,
+                      style: tt.bodyMedium?.copyWith(color: cs.error),
+                    ),
+                  );
+                }
+                final reviews = snapshot.data ?? [];
+                if (reviews.isEmpty) {
+                  return Center(
+                    child: Text(
+                      'Chưa có đánh giá nào cho xe này.',
+                      style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
+                    ),
+                  );
+                }
+
+                final avg = reviews
+                        .map((r) => (r['rating'] as num?)?.toDouble() ?? 0)
+                        .fold<double>(0, (a, b) => a + b) /
+                    reviews.length;
+
+                return ListView.separated(
+                  controller: widget.scrollController,
+                  itemCount: reviews.length + 1,
+                  separatorBuilder: (_, _) =>
+                      const SizedBox(height: AppSpacing.md),
+                  itemBuilder: (context, index) {
+                    if (index == 0) {
+                      return AppSurface(
+                        padding: const EdgeInsets.all(AppSpacing.md),
+                        color: cs.primaryContainer.withValues(alpha: 0.25),
+                        child: Row(
+                          children: [
+                            Icon(Icons.star_rounded, color: Colors.orange.shade700),
+                            const SizedBox(width: AppSpacing.sm),
+                            Text(
+                              '${avg.toStringAsFixed(1)} / 5',
+                              style: tt.titleMedium?.copyWith(
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            const SizedBox(width: AppSpacing.sm),
+                            Flexible(
+                              child: Text(
+                                '(${reviews.length} đánh giá)',
+                                style: tt.bodySmall?.copyWith(
+                                  color: cs.onSurfaceVariant,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }
+
+                    final review = reviews[index - 1];
+                    final rating = review['rating'] as int? ?? 0;
+                    final date =
+                        review['createdAt']?.toString().split('T').first ?? '';
+                    final userName =
+                        review['userName']?.toString() ?? 'Khách hàng';
+                    final bookingId = review['bookingId'];
+
+                    return AppSurface(
+                      padding: const EdgeInsets.all(AppSpacing.md),
+                      color: cs.surfaceContainerLowest,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              CircleAvatar(
+                                radius: 16,
+                                backgroundColor:
+                                    cs.primary.withValues(alpha: 0.12),
+                                child: Text(
+                                  userName.isNotEmpty
+                                      ? userName[0].toUpperCase()
+                                      : 'K',
+                                  style: TextStyle(
+                                    color: cs.primary,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: AppSpacing.sm),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      userName,
+                                      style: tt.titleSmall?.copyWith(
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                    if (bookingId != null)
+                                      Text(
+                                        'Đơn #$bookingId',
+                                        style: tt.bodySmall?.copyWith(
+                                          color: cs.onSurfaceVariant,
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                              ),
+                              Flexible(
+                                child: Text(
+                                  date,
+                                  style: tt.bodySmall?.copyWith(
+                                    color: cs.onSurfaceVariant,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  textAlign: TextAlign.end,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: AppSpacing.sm),
+                          Row(
+                            children: List.generate(5, (i) {
+                              return Icon(
+                                i < rating
+                                    ? Icons.star_rounded
+                                    : Icons.star_border_rounded,
+                                color: Colors.orange.shade700,
+                                size: 18,
+                              );
+                            }),
+                          ),
+                          if (review['comment'] != null &&
+                              review['comment'].toString().isNotEmpty) ...[
+                            const SizedBox(height: AppSpacing.sm),
+                            Text(
+                              review['comment'].toString(),
+                              style: tt.bodyMedium,
+                            ),
+                          ],
+                        ],
+                      ),
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+        ],
       ),
     );
   }

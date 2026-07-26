@@ -225,6 +225,15 @@ public class BookingServiceImpl implements BookingService {
         booking.setStatus(BookingStatus.RENTING);
         booking = bookingRepository.save(booking);
 
+        // Khi admin bàn giao xe: coi như đã chốt thanh toán → hóa đơn PAID.
+        Invoice invoice = booking.getInvoice();
+        if (invoice != null && invoice.getStatus() != InvoiceStatus.PAID) {
+            invoice.setStatus(InvoiceStatus.PAID);
+            invoiceRepository.save(invoice);
+            log.info("Invoice {} marked PAID after handover of booking {}",
+                    invoice.getInvoiceId(), booking.getBookingId());
+        }
+
         notificationService.send(booking.getUser(),
                 "Bắt đầu chuyến đi",
                 "Bạn đã nhận xe và chuyến đi #" + booking.getBookingId() + " chính thức bắt đầu!",

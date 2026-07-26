@@ -130,11 +130,16 @@ class InvoiceListScreen extends ConsumerWidget {
                                 ],
                               ),
                             ),
-                            Text(
-                              _invoiceStatusLabel(status),
-                              style: tt.labelSmall?.copyWith(
-                                color: statusColor,
-                                fontWeight: FontWeight.w700,
+                            Flexible(
+                              child: Text(
+                                _invoiceStatusLabel(status),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                textAlign: TextAlign.end,
+                                style: tt.labelSmall?.copyWith(
+                                  color: statusColor,
+                                  fontWeight: FontWeight.w700,
+                                ),
                               ),
                             ),
                           ],
@@ -148,11 +153,19 @@ class InvoiceListScreen extends ConsumerWidget {
                               child: Text(
                                 '${invoice['startDate']} → ${invoice['endDate']}',
                                 style: tt.bodySmall,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
                               ),
                             ),
-                            Text(
-                              '${invoice['totalAmount'] ?? ''} ₫',
-                              style: tt.titleSmall?.copyWith(color: cs.primary),
+                            const SizedBox(width: 8),
+                            Flexible(
+                              child: Text(
+                                '${invoice['totalAmount'] ?? ''} ₫',
+                                style: tt.titleSmall?.copyWith(color: cs.primary),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                textAlign: TextAlign.end,
+                              ),
                             ),
                           ],
                         ),

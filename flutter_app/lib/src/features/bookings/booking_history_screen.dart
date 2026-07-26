@@ -186,20 +186,25 @@ class BookingHistoryScreen extends ConsumerWidget {
                                 ],
                               ),
                             ),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: AppSpacing.sm + 4,
-                                vertical: AppSpacing.sm - 2,
-                              ),
-                              decoration: BoxDecoration(
-                                color: statusColor.withValues(alpha: 0.1),
-                                borderRadius: BorderRadius.circular(AppTheme.radiusPill),
-                              ),
-                              child: Text(
-                                _statusLabel(status),
-                                style: tt.labelSmall?.copyWith(
-                                  color: statusColor,
-                                  fontWeight: FontWeight.w700,
+                            Flexible(
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: AppSpacing.sm + 4,
+                                  vertical: AppSpacing.sm - 2,
+                                ),
+                                constraints: const BoxConstraints(maxWidth: 120),
+                                decoration: BoxDecoration(
+                                  color: statusColor.withValues(alpha: 0.1),
+                                  borderRadius: BorderRadius.circular(AppTheme.radiusPill),
+                                ),
+                                child: Text(
+                                  _statusLabel(status),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: tt.labelSmall?.copyWith(
+                                    color: statusColor,
+                                    fontWeight: FontWeight.w700,
+                                  ),
                                 ),
                               ),
                             ),
@@ -214,6 +219,8 @@ class BookingHistoryScreen extends ConsumerWidget {
                               child: Text(
                                 '${booking['startDate']} → ${booking['endDate']}',
                                 style: tt.bodyMedium,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
                               ),
                             ),
                           ],

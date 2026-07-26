@@ -399,13 +399,21 @@ class _BookingCardState extends State<_BookingCard> {
                   child: Text(
                     '${b['startDate'] ?? ''} → ${b['endDate'] ?? ''}',
                     style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
-                Text(
-                  _formatPrice(b['totalPrice']),
-                  style: tt.titleSmall?.copyWith(
-                    color: cs.primary,
-                    fontWeight: FontWeight.w700,
+                const SizedBox(width: 8),
+                Flexible(
+                  child: Text(
+                    _formatPrice(b['totalPrice']),
+                    style: tt.titleSmall?.copyWith(
+                      color: cs.primary,
+                      fontWeight: FontWeight.w700,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.end,
                   ),
                 ),
               ],

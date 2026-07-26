@@ -282,7 +282,9 @@ class _UserCard extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(width: 8),
-                      _RoleBadge(label: roleLabel, color: roleColor),
+                      Flexible(
+                        child: _RoleBadge(label: roleLabel, color: roleColor),
+                      ),
                     ],
                   ),
                   const SizedBox(height: 2),
@@ -296,9 +298,14 @@ class _UserCard extends StatelessWidget {
                         Icon(Icons.phone_outlined,
                             size: 12, color: cs.outline),
                         const SizedBox(width: 4),
-                        Text(phone,
-                            style:
-                                tt.bodySmall?.copyWith(color: cs.outline)),
+                        Flexible(
+                          child: Text(
+                            phone,
+                            style: tt.bodySmall?.copyWith(color: cs.outline),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
                         const SizedBox(width: 12),
                       ],
                       if (totalBookings != null) ...[
@@ -349,6 +356,8 @@ class _RoleBadge extends StatelessWidget {
       ),
       child: Text(
         label,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
         style: Theme.of(context).textTheme.labelSmall?.copyWith(
               color: color,
               fontWeight: FontWeight.w700,

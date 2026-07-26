@@ -124,9 +124,13 @@ class CarDetailScreen extends ConsumerWidget {
                                               '${car['averageRating'] ?? 'Mới'}',
                                               style: tt.titleMedium?.copyWith(fontWeight: FontWeight.bold),
                                             ),
-                                            Text(
-                                              ' (${car['reviewCount'] ?? 0} đánh giá)',
-                                              style: tt.bodyMedium,
+                                            Flexible(
+                                              child: Text(
+                                                ' (${car['reviewCount'] ?? 0} đánh giá)',
+                                                style: tt.bodyMedium,
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
                                             ),
                                           ],
                                         ),
@@ -300,25 +304,25 @@ class CarDetailScreen extends ConsumerWidget {
                                           crossAxisAlignment: CrossAxisAlignment.start,
                                           children: [
                                             Row(
-                                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                               children: [
-                                                Row(
-                                                  children: [
-                                                    CircleAvatar(
-                                                      radius: 16,
-                                                      backgroundColor: cs.primaryContainer.withValues(alpha: 0.2),
-                                                      child: Text(
-                                                        (review['userName']?.toString() ?? 'K')[0].toUpperCase(),
-                                                        style: TextStyle(color: cs.primary, fontWeight: FontWeight.bold),
-                                                      ),
-                                                    ),
-                                                    const SizedBox(width: 12),
-                                                    Text(
-                                                      review['userName']?.toString() ?? 'Khách hàng',
-                                                      style: tt.titleMedium,
-                                                    ),
-                                                  ],
+                                                CircleAvatar(
+                                                  radius: 16,
+                                                  backgroundColor: cs.primaryContainer.withValues(alpha: 0.2),
+                                                  child: Text(
+                                                    (review['userName']?.toString() ?? 'K')[0].toUpperCase(),
+                                                    style: TextStyle(color: cs.primary, fontWeight: FontWeight.bold),
+                                                  ),
                                                 ),
+                                                const SizedBox(width: 12),
+                                                Expanded(
+                                                  child: Text(
+                                                    review['userName']?.toString() ?? 'Khách hàng',
+                                                    style: tt.titleMedium,
+                                                    maxLines: 1,
+                                                    overflow: TextOverflow.ellipsis,
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 8),
                                                 Text(date, style: tt.bodySmall),
                                               ],
                                             ),
