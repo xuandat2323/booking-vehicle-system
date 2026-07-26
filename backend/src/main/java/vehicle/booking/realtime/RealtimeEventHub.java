@@ -63,6 +63,9 @@ public class RealtimeEventHub {
     }
 
     public void publishBookingUpdated(Long ownerUserId, Long bookingId, String status) {
+        if (ownerUserId == null || bookingId == null) {
+            return;
+        }
         Map<String, Object> payload = Map.of(
                 "type", "BOOKING_UPDATED",
                 "bookingId", bookingId,
@@ -76,6 +79,9 @@ public class RealtimeEventHub {
     }
 
     public void publishNotificationCreated(Long userId, Long notificationId) {
+        if (userId == null || notificationId == null) {
+            return;
+        }
         Map<String, Object> payload = Map.of(
                 "type", "NOTIFICATION_CREATED",
                 "notificationId", notificationId,

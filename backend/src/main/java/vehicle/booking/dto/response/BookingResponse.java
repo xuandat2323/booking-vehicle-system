@@ -21,6 +21,8 @@ public record BookingResponse(
         BigDecimal totalPrice,
         BigDecimal depositAmount,
         BookingStatus status,
+        String cancelReason,
+        String cancelHandling,
         LocalDateTime createdAt,
         LocalDateTime updatedAt,
         String pickupAddress,

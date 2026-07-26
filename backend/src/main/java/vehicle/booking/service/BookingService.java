@@ -21,6 +21,9 @@ public interface BookingService {
 
     BookingResponse cancelBooking(Long bookingId, String currentUserPhone, boolean isAdmin);
 
+    BookingResponse cancelBooking(Long bookingId, String currentUserPhone, boolean isAdmin,
+                                  String cancelReason, String cancelHandling);
+
     BookingResponse updatePickupLocation(Long bookingId, String currentUserPhone, vehicle.booking.dto.request.BookingLocationRequest request);
 
     BookingResponse updateDropoffLocation(Long bookingId, String currentUserPhone, vehicle.booking.dto.request.BookingLocationRequest request);

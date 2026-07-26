@@ -4,10 +4,13 @@ import vehicle.booking.dto.response.ApiResponse;
 import vehicle.booking.dto.response.BookingResponse;
 import vehicle.booking.dto.response.BookingSummaryResponse;
 import vehicle.booking.dto.response.PageResponse;
+import vehicle.booking.dto.request.BookingCancelRequest;
 import vehicle.booking.service.BookingService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
@@ -27,7 +30,8 @@ public class AdminBookingController {
             @RequestParam(defaultValue = "0")  int page,
             @RequestParam(defaultValue = "10") int size) {
 
-        Pageable pageable = PageRequest.of(page, Math.min(size, 50));
+        Pageable pageable = PageRequest.of(
+                page, Math.min(size, 50), Sort.by(Sort.Direction.DESC, "createdAt"));
 
         return ResponseEntity.ok(new ApiResponse<>(true, "Lấy danh sách tất cả booking thành công", PageResponse.of(bookingService.getAllBookings(pageable))));
     }
@@ -73,8 +77,11 @@ public class AdminBookingController {
     }
 
     @PutMapping("/{id}/cancel")
-    public ResponseEntity<ApiResponse<BookingResponse>> cancelBooking(@PathVariable Long id) {
-        BookingResponse response = bookingService.cancelBooking(id, null, true);
+    public ResponseEntity<ApiResponse<BookingResponse>> cancelBooking(
+            @PathVariable Long id,
+            @Valid @RequestBody BookingCancelRequest request) {
+        BookingResponse response = bookingService.cancelBooking(
+                id, null, true, request.reason(), request.handling());
         return ResponseEntity.ok(
                 new ApiResponse<>(true, "Hủy booking thành công", response)
         );

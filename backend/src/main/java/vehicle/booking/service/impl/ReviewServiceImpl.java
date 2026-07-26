@@ -79,7 +79,7 @@ public class ReviewServiceImpl implements ReviewService {
         return new ReviewResponse(
                 review.getReviewId(),
                 review.getUser().getUserId(),
-                review.getUser().getName(),
+                vehicle.booking.util.UserDisplay.name(review.getUser()),
                 review.getCar().getCarId(),
                 review.getBooking().getBookingId(),
                 review.getRating(),

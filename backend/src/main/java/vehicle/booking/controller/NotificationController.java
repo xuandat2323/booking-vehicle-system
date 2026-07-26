@@ -14,7 +14,7 @@ import vehicle.booking.service.NotificationService;
 @RestController
 @RequestMapping("/api/notifications")
 @RequiredArgsConstructor
-@PreAuthorize("hasRole('USER')")
+@PreAuthorize("hasAnyRole('USER', 'ADMIN')")
 public class NotificationController {
 
     private final NotificationService notificationService;

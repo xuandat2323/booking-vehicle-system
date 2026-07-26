@@ -11,6 +11,7 @@ import vehicle.booking.realtime.RealtimeEventHub;
 import vehicle.booking.service.NotificationService;
 import vehicle.booking.service.SepayService;
 import vehicle.booking.entity.enums.NotificationType;
+import vehicle.booking.util.UserDisplay;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -117,9 +118,12 @@ public class SepayServiceImpl implements SepayService {
     }
 
     private void markPaid(Booking booking) {
-        if (booking.getStatus() == BookingStatus.PENDING) {
-            booking.setStatus(BookingStatus.DEPOSIT_PAID);
-            bookingRepository.save(booking);
+        if (booking.getStatus() != BookingStatus.PENDING) {
+            return;
+        }
+        booking.setStatus(BookingStatus.DEPOSIT_PAID);
+        bookingRepository.saveAndFlush(booking);
+        try {
             if (booking.getUser() != null) {
                 realtimeEventHub.publishBookingUpdated(
                         booking.getUser().getUserId(),
@@ -133,11 +137,14 @@ public class SepayServiceImpl implements SepayService {
                 notificationService.sendToAdmins(
                         "Có đơn chờ duyệt",
                         "Đơn #" + booking.getBookingId() + " của khách "
-                                + booking.getUser().getName() + " đã đặt cọc, cần xác nhận.",
+                                + UserDisplay.name(booking.getUser()) + " đã đặt cọc, cần xác nhận.",
                         NotificationType.BOOKING_DEPOSIT_PAID, booking.getBookingId());
             }
-            log.info("Booking {} marked DEPOSIT_PAID via SePay", booking.getBookingId());
+        } catch (Exception e) {
+            log.warn("markPaid side-effects failed for booking {}: {}",
+                    booking.getBookingId(), e.getMessage());
         }
+        log.info("Booking {} marked DEPOSIT_PAID via SePay", booking.getBookingId());
     }
 
     private String paymentCode(Long bookingId) {

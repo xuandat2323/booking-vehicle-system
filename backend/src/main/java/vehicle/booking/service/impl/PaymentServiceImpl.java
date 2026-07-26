@@ -15,6 +15,7 @@ import vehicle.booking.service.EmailService;
 import vehicle.booking.service.NotificationService;
 import vehicle.booking.service.PaymentService;
 import vehicle.booking.entity.enums.NotificationType;
+import vehicle.booking.util.UserDisplay;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -113,7 +114,7 @@ public class PaymentServiceImpl implements PaymentService {
                 notificationService.sendToAdmins(
                         "Có đơn chờ duyệt",
                         "Đơn #" + booking.getBookingId() + " của khách "
-                                + booking.getUser().getName() + " đã đặt cọc, cần xác nhận.",
+                                + UserDisplay.name(booking.getUser()) + " đã đặt cọc, cần xác nhận.",
                         NotificationType.BOOKING_DEPOSIT_PAID, booking.getBookingId());
             } else {
                 notificationService.send(booking.getUser(),
@@ -162,7 +163,7 @@ public class PaymentServiceImpl implements PaymentService {
                 payment.getInvoice().getInvoiceId(),
                 payment.getInvoice().getInvoiceNumber(),
                 user.getUserId(),
-                user.getName(),
+                UserDisplay.name(user),
                 payment.getAmount(),
                 payment.getPaymentMethod(),
                 payment.getPaymentStatus(),

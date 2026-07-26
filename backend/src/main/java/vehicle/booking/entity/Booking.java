@@ -78,6 +78,14 @@ public class Booking {
     @Column(name = "status", nullable = false)
     private BookingStatus status = BookingStatus.PENDING;
 
+    /** Lý do hủy đơn (admin nhập khi hủy). */
+    @Column(name = "cancel_reason", length = 500)
+    private String cancelReason;
+
+    /** Hướng xử lý sau khi hủy (admin nhập khi hủy). */
+    @Column(name = "cancel_handling", length = 500)
+    private String cancelHandling;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt = LocalDateTime.now();
 

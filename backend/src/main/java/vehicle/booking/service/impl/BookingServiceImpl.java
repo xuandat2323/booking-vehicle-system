@@ -19,6 +19,7 @@ import vehicle.booking.entity.enums.NotificationType;
 import vehicle.booking.service.BookingService;
 import vehicle.booking.service.InvoiceService;
 import vehicle.booking.service.NotificationService;
+import vehicle.booking.util.UserDisplay;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -136,7 +137,7 @@ public class BookingServiceImpl implements BookingService {
                 NotificationType.BOOKING_CREATED, booking.getBookingId());
         notificationService.sendToAdmins(
                 "Đơn thuê mới",
-                "Khách " + user.getName() + " vừa tạo đơn #" + booking.getBookingId()
+                "Khách " + UserDisplay.name(user) + " vừa tạo đơn #" + booking.getBookingId()
                         + " thuê " + carLabel + ".",
                 NotificationType.BOOKING_CREATED, booking.getBookingId());
         publishBooking(booking);
@@ -176,24 +177,45 @@ public class BookingServiceImpl implements BookingService {
     @Override
     @Transactional
     public BookingResponse cancelBooking(Long bookingId, String currentUserPhone, boolean isAdmin) {
+        return cancelBooking(bookingId, currentUserPhone, isAdmin, null, null);
+    }
+
+    @Override
+    @Transactional
+    public BookingResponse cancelBooking(Long bookingId, String currentUserPhone, boolean isAdmin,
+                                         String cancelReason, String cancelHandling) {
         Booking booking = bookingRepository.findById(bookingId)
                 .orElseThrow(() -> new AppException(ErrorCode.BOOKING_NOT_FOUND, bookingId));
 
-        if(!isAdmin) {
+        if (!isAdmin) {
             User currentUser = userRepository.findByPhone(currentUserPhone)
                     .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND, bookingId));
 
-            if(!booking.getUser().getUserId().equals(currentUser.getUserId())) {
+            if (!booking.getUser().getUserId().equals(currentUser.getUserId())) {
                 throw new AppException(ErrorCode.BOOKING_ACCESS_DENIED);
             }
 
-            if(booking.getStatus() != BookingStatus.PENDING) {
+            if (booking.getStatus() != BookingStatus.PENDING) {
                 throw new AppException(ErrorCode.BOOKING_CANCEL_NOT_ALLOWED, booking.getStatus());
             }
+        } else {
+            // Admin chỉ hủy trước khi bàn giao xe.
+            if (booking.getStatus() != BookingStatus.PENDING
+                    && booking.getStatus() != BookingStatus.DEPOSIT_PAID
+                    && booking.getStatus() != BookingStatus.CONFIRMED) {
+                throw new AppException(ErrorCode.BOOKING_CANCEL_NOT_ALLOWED, booking.getStatus());
+            }
+            if (cancelReason == null || cancelReason.isBlank()
+                    || cancelHandling == null || cancelHandling.isBlank()) {
+                throw new AppException(ErrorCode.BOOKING_CANCEL_REASON_REQUIRED);
+            }
+            booking.setCancelReason(cancelReason.trim());
+            booking.setCancelHandling(cancelHandling.trim());
         }
 
-        if(booking.getStatus() == BookingStatus.CANCELLED) {
-            throw new AppException(ErrorCode.BOOKING_INVALID_STATUS_TRANSITION, BookingStatus.CANCELLED, BookingStatus.COMPLETED);
+        if (booking.getStatus() == BookingStatus.CANCELLED) {
+            throw new AppException(ErrorCode.BOOKING_INVALID_STATUS_TRANSITION,
+                    BookingStatus.CANCELLED, BookingStatus.COMPLETED);
         }
 
         booking.setStatus(BookingStatus.CANCELLED);
@@ -206,14 +228,24 @@ public class BookingServiceImpl implements BookingService {
             carRepository.save(car);
         }
 
+        String userMessage = "Đơn đặt xe #" + booking.getBookingId() + " đã được hủy.";
+        if (isAdmin && booking.getCancelReason() != null) {
+            userMessage = "Đơn #" + booking.getBookingId() + " đã bị admin hủy."
+                    + " Lý do: " + booking.getCancelReason()
+                    + ". Hướng xử lý: " + booking.getCancelHandling();
+        }
+
         notificationService.send(booking.getUser(),
                 "Đơn đã bị hủy",
-                "Đơn đặt xe #" + booking.getBookingId() + " đã được hủy.",
+                userMessage,
                 NotificationType.BOOKING_CANCELLED, booking.getBookingId());
         notificationService.sendToAdmins(
                 "Đơn bị hủy",
                 "Đơn #" + booking.getBookingId() + " của khách "
-                        + booking.getUser().getName() + " đã bị hủy.",
+                        + UserDisplay.name(booking.getUser()) + " đã bị hủy"
+                        + (isAdmin && booking.getCancelReason() != null
+                        ? (". Lý do: " + booking.getCancelReason())
+                        : "."),
                 NotificationType.BOOKING_CANCELLED, booking.getBookingId());
 
         publishBooking(booking);
@@ -308,7 +340,7 @@ public class BookingServiceImpl implements BookingService {
         notificationService.sendToAdmins(
                 "Khách đã trả xe",
                 "Đơn #" + booking.getBookingId() + " của khách "
-                        + booking.getUser().getName() + " đã trả xe, cần hoàn tất đơn.",
+                        + UserDisplay.name(booking.getUser()) + " đã trả xe, cần hoàn tất đơn.",
                 NotificationType.BOOKING_RETURNED, booking.getBookingId());
 
         publishBooking(booking);
@@ -430,7 +462,7 @@ public class BookingServiceImpl implements BookingService {
             notificationService.sendToAdmins(
                     "Đơn hết hạn cọc",
                     "Đơn #" + booking.getBookingId() + " của khách "
-                            + booking.getUser().getName() + " đã hủy vì quá hạn đặt cọc.",
+                            + UserDisplay.name(booking.getUser()) + " đã hủy vì quá hạn đặt cọc.",
                     NotificationType.BOOKING_CANCELLED, booking.getBookingId());
 
             expiredBookingIds.add(booking.getBookingId());
@@ -508,7 +540,7 @@ public class BookingServiceImpl implements BookingService {
                 booking.getBookingId(),
                 booking.getUser().getUserId(),
                 booking.getInvoice() != null ? booking.getInvoice().getInvoiceId() : null,
-                booking.getUser().getName(),
+                UserDisplay.name(booking.getUser()),
                 booking.getUser().getPhone(),
                 booking.getCar().getCarId(),
                 booking.getCar().getName(),
@@ -519,6 +551,8 @@ public class BookingServiceImpl implements BookingService {
                 booking.getTotalPrice(),
                 booking.getDepositAmount(),
                 booking.getStatus(),
+                booking.getCancelReason(),
+                booking.getCancelHandling(),
                 booking.getCreatedAt(),
                 booking.getUpdatedAt(),
                 booking.getPickupAddress(),
@@ -540,7 +574,11 @@ public class BookingServiceImpl implements BookingService {
                 booking.getEndDate(),
                 booking.getTotalPrice(),
                 booking.getDepositAmount(),
-                booking.getStatus()
+                booking.getStatus(),
+                booking.getCancelReason(),
+                booking.getCancelHandling(),
+                UserDisplay.name(booking.getUser()),
+                booking.getUser() != null ? booking.getUser().getPhone() : null
         );
     }
 }

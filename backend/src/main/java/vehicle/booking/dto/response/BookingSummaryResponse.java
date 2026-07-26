@@ -14,7 +14,11 @@ public record BookingSummaryResponse(
         LocalDate endDate,
         BigDecimal totalPrice,
         BigDecimal depositAmount,
-        BookingStatus status
+        BookingStatus status,
+        String cancelReason,
+        String cancelHandling,
+        String userName,
+        String userPhone
 ) {
 }
 

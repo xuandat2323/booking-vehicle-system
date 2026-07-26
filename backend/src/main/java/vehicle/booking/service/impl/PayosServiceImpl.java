@@ -3,6 +3,7 @@ package vehicle.booking.service.impl;
 import vehicle.booking.config.PayosConfig;
 import vehicle.booking.dto.response.PayosPaymentResponse;
 import vehicle.booking.entity.Booking;
+import vehicle.booking.entity.User;
 import vehicle.booking.entity.enums.BookingStatus;
 import vehicle.booking.exception.AppException;
 import vehicle.booking.exception.ErrorCode;
@@ -11,6 +12,7 @@ import vehicle.booking.realtime.RealtimeEventHub;
 import vehicle.booking.service.NotificationService;
 import vehicle.booking.service.PayosService;
 import vehicle.booking.entity.enums.NotificationType;
+import vehicle.booking.util.UserDisplay;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.hibernate.Hibernate;
@@ -60,17 +62,20 @@ public class PayosServiceImpl implements PayosService {
         String carName = booking.getCar() != null && booking.getCar().getName() != null
                 ? booking.getCar().getName().trim()
                 : "Xe";
-        String renterName = booking.getUser() != null && booking.getUser().getName() != null
-                ? booking.getUser().getName().trim()
-                : "Khach";
+        String renterName = UserDisplay.name(booking.getUser());
         String rentalPeriod = DATE_FMT.format(booking.getStartDate()) + " - " + DATE_FMT.format(booking.getEndDate());
         String paymentContent = carName + " - " + renterName + " - " + rentalPeriod;
 
         BigDecimal paymentAmount = booking.getDepositAmount() != null
                 ? booking.getDepositAmount()
                 : booking.getTotalPrice();
+        if (paymentAmount == null || paymentAmount.longValue() < 1000) {
+            throw new AppException(ErrorCode.PAYMENT_CREATE_FAILED,
+                    "Số tiền cọc không hợp lệ (" + paymentAmount + ")");
+        }
         long amount = paymentAmount.longValue();
-        long orderCode = bookingId;
+        // PayOS yêu cầu orderCode duy nhất; encode bookingId để webhook decode lại.
+        long orderCode = toOrderCode(bookingId);
         // PayOS description tối đa ~25 ký tự
         String description = truncate(paymentContent, 25);
 
@@ -141,7 +146,10 @@ public class PayosServiceImpl implements PayosService {
             );
         } catch (Exception e) {
             log.error("PayOS create payment failed for booking {}: {}", bookingId, e.getMessage());
-            throw new AppException(ErrorCode.COMMON_INTERNAL_ERROR);
+            String detail = e.getMessage() != null && !e.getMessage().isBlank()
+                    ? e.getMessage()
+                    : "lỗi PayOS không xác định";
+            throw new AppException(ErrorCode.PAYMENT_CREATE_FAILED, detail);
         }
     }
 
@@ -162,7 +170,7 @@ public class PayosServiceImpl implements PayosService {
                 return true;
             }
 
-            Long bookingId = data.getOrderCode();
+            Long bookingId = fromOrderCode(data.getOrderCode());
             Booking booking = bookingRepository.findById(bookingId).orElse(null);
             if (booking == null) {
                 log.warn("PayOS webhook: booking {} not found", bookingId);
@@ -206,28 +214,40 @@ public class PayosServiceImpl implements PayosService {
     }
 
     private void markPaid(Booking booking) {
-        if (booking.getStatus() == BookingStatus.PENDING) {
-            booking.setStatus(BookingStatus.DEPOSIT_PAID);
-            bookingRepository.save(booking);
-            Hibernate.initialize(booking.getUser());
-            if (booking.getUser() != null) {
-                realtimeEventHub.publishBookingUpdated(
-                        booking.getUser().getUserId(),
-                        booking.getBookingId(),
-                        BookingStatus.DEPOSIT_PAID.name());
-                notificationService.send(booking.getUser(),
-                        "Đã đặt cọc thành công",
-                        "Đơn #" + booking.getBookingId()
-                                + " đã nhận cọc 30%. Vui lòng chờ admin xác nhận giữ xe.",
-                        NotificationType.BOOKING_DEPOSIT_PAID, booking.getBookingId());
-                notificationService.sendToAdmins(
-                        "Có đơn chờ duyệt",
-                        "Đơn #" + booking.getBookingId() + " của khách "
-                                + booking.getUser().getName() + " đã đặt cọc, cần xác nhận.",
-                        NotificationType.BOOKING_DEPOSIT_PAID, booking.getBookingId());
-            }
-            log.info("Booking {} marked DEPOSIT_PAID via PayOS", booking.getBookingId());
+        if (booking.getStatus() != BookingStatus.PENDING) {
+            return;
         }
+        // 1) Đổi trạng thái trước — flush ngay để commit không phụ thuộc thông báo.
+        booking.setStatus(BookingStatus.DEPOSIT_PAID);
+        bookingRepository.saveAndFlush(booking);
+
+        // 2) Side-effects phụ (SSE + notification) — bắt lỗi riêng, không rollback cọc.
+        try {
+            Hibernate.initialize(booking.getUser());
+            User user = booking.getUser();
+            if (user == null) {
+                log.info("Booking {} marked DEPOSIT_PAID via PayOS (no user)", booking.getBookingId());
+                return;
+            }
+            realtimeEventHub.publishBookingUpdated(
+                    user.getUserId(),
+                    booking.getBookingId(),
+                    BookingStatus.DEPOSIT_PAID.name());
+            notificationService.send(user,
+                    "Đã đặt cọc thành công",
+                    "Đơn #" + booking.getBookingId()
+                            + " đã nhận cọc 30%. Vui lòng chờ admin xác nhận giữ xe.",
+                    NotificationType.BOOKING_DEPOSIT_PAID, booking.getBookingId());
+            notificationService.sendToAdmins(
+                    "Có đơn chờ duyệt",
+                    "Đơn #" + booking.getBookingId() + " của khách "
+                            + UserDisplay.name(user) + " đã đặt cọc, cần xác nhận.",
+                    NotificationType.BOOKING_DEPOSIT_PAID, booking.getBookingId());
+        } catch (Exception e) {
+            log.warn("markPaid side-effects failed for booking {}: {}",
+                    booking.getBookingId(), e.getMessage());
+        }
+        log.info("Booking {} marked DEPOSIT_PAID via PayOS", booking.getBookingId());
     }
 
     /**
@@ -254,5 +274,18 @@ public class PayosServiceImpl implements PayosService {
         if (s == null) return "";
         String t = s.trim();
         return t.length() <= max ? t : t.substring(0, max);
+    }
+
+    /** orderCode = bookingId * 1_000_000 + ms%1_000_000 — unique mỗi lần tạo link. */
+    private static long toOrderCode(long bookingId) {
+        return bookingId * 1_000_000L + (System.currentTimeMillis() % 1_000_000L);
+    }
+
+    /** Hỗ trợ cả orderCode cũ (= bookingId) và orderCode mới đã encode. */
+    private static long fromOrderCode(long orderCode) {
+        if (orderCode < 1_000_000L) {
+            return orderCode;
+        }
+        return orderCode / 1_000_000L;
     }
 }

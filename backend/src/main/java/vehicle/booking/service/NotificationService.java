@@ -1,6 +1,7 @@
 package vehicle.booking.service;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -17,6 +18,7 @@ import vehicle.booking.realtime.RealtimeEventHub;
 
 import java.util.List;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class NotificationService {
@@ -26,28 +28,42 @@ public class NotificationService {
     private final FcmService fcmService;
     private final RealtimeEventHub realtimeEventHub;
 
+    /**
+     * Gửi thông báo — không ném exception ra ngoài để không làm hỏng nghiệp vụ chính
+     * (đặt cọc, hủy đơn, v.v.).
+     */
     public void send(User user, String title, String message, NotificationType type, Long referenceId) {
         if (user == null) {
             return;
         }
-        Notification n = new Notification();
-        n.setUser(user);
-        n.setTitle(title);
-        n.setMessage(message);
-        n.setType(type);
-        n.setReferenceId(referenceId);
-        notificationRepository.save(n);
+        try {
+            Notification n = new Notification();
+            n.setUser(user);
+            n.setTitle(title);
+            n.setMessage(message);
+            n.setType(type != null ? type : NotificationType.SYSTEM);
+            n.setReferenceId(referenceId);
+            notificationRepository.saveAndFlush(n);
 
-        // Push to device if FCM token is registered
-        fcmService.send(user.getFcmToken(), title, message);
-        realtimeEventHub.publishNotificationCreated(user.getUserId(), n.getNotificationId());
+            fcmService.send(user.getFcmToken(), title, message);
+            if (n.getNotificationId() != null && user.getUserId() != null) {
+                realtimeEventHub.publishNotificationCreated(user.getUserId(), n.getNotificationId());
+            }
+        } catch (Exception e) {
+            log.warn("Notification send failed userId={} type={}: {}",
+                    user.getUserId(), type, e.getMessage());
+        }
     }
 
     /** Gửi thông báo tới toàn bộ tài khoản ADMIN đang hoạt động. */
     public void sendToAdmins(String title, String message, NotificationType type, Long referenceId) {
-        List<User> admins = userRepository.findByRoleIgnoreCase("ADMIN");
-        for (User admin : admins) {
-            send(admin, title, message, type, referenceId);
+        try {
+            List<User> admins = userRepository.findByRoleIgnoreCase("ADMIN");
+            for (User admin : admins) {
+                send(admin, title, message, type, referenceId);
+            }
+        } catch (Exception e) {
+            log.warn("sendToAdmins failed type={}: {}", type, e.getMessage());
         }
     }
 
