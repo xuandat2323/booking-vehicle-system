@@ -256,8 +256,18 @@ class CarDetailScreen extends ConsumerWidget {
                                           Row(
                                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                             children: [
-                                              _buildTrackingInfo(context, Icons.speed_rounded, '${tracking['speedKmh'] ?? '-'} km/h', 'Tốc độ'),
-                                              _buildTrackingInfo(context, Icons.update_rounded, tracking['updatedAt']?.toString().split('T').last.substring(0,5) ?? '-', 'Cập nhật'),
+                                              _buildTrackingInfo(
+                                                context,
+                                                Icons.speed_rounded,
+                                                '${tracking['speedKmh'] ?? '-'} km/h',
+                                                'Tốc độ',
+                                              ),
+                                              _buildTrackingInfo(
+                                                context,
+                                                Icons.update_rounded,
+                                                _formatTrackingTime(tracking['updatedAt']),
+                                                'Cập nhật',
+                                              ),
                                             ],
                                           ),
                                         ],
@@ -292,6 +302,11 @@ class CarDetailScreen extends ConsumerWidget {
                                     children: reviews.map((review) {
                                       final rating = review['rating'] as int? ?? 5;
                                       final date = review['createdAt']?.toString().split('T').first ?? '';
+                                      final userName = (review['userName']?.toString() ?? '').trim();
+                                      final displayName = userName.isEmpty ? 'Khách hàng' : userName;
+                                      final initial = displayName.isNotEmpty
+                                          ? displayName[0].toUpperCase()
+                                          : 'K';
                                       return Container(
                                         margin: const EdgeInsets.only(bottom: 16),
                                         padding: const EdgeInsets.all(20),
@@ -309,14 +324,14 @@ class CarDetailScreen extends ConsumerWidget {
                                                   radius: 16,
                                                   backgroundColor: cs.primaryContainer.withValues(alpha: 0.2),
                                                   child: Text(
-                                                    (review['userName']?.toString() ?? 'K')[0].toUpperCase(),
+                                                    initial,
                                                     style: TextStyle(color: cs.primary, fontWeight: FontWeight.bold),
                                                   ),
                                                 ),
                                                 const SizedBox(width: 12),
                                                 Expanded(
                                                   child: Text(
-                                                    review['userName']?.toString() ?? 'Khách hàng',
+                                                    displayName,
                                                     style: tt.titleMedium,
                                                     maxLines: 1,
                                                     overflow: TextOverflow.ellipsis,
@@ -409,6 +424,16 @@ class CarDetailScreen extends ConsumerWidget {
       );
     }
     return _placeholderImage(context);
+  }
+
+  String _formatTrackingTime(dynamic updatedAt) {
+    if (updatedAt == null) return '-';
+    final raw = updatedAt.toString();
+    if (raw.contains('T')) {
+      final time = raw.split('T').last;
+      return time.length >= 5 ? time.substring(0, 5) : time;
+    }
+    return raw.length >= 5 ? raw.substring(0, 5) : raw;
   }
 
   Widget _placeholderImage(BuildContext context) {

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/auth/current_user_provider.dart';
 import '../../core/network/dio_provider.dart';
 
 final notificationListProvider = FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
@@ -92,6 +93,7 @@ class NotificationScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final notifAsync = ref.watch(notificationListProvider);
+    final isAdmin = ref.watch(isAdminProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -137,7 +139,11 @@ class NotificationScreen extends ConsumerWidget {
                   onTap: () {
                     _markRead(ref, notif['id'] as int);
                     if (referenceId != null && (type?.startsWith('BOOKING') ?? false)) {
-                      context.push('/bookings/$referenceId');
+                      if (isAdmin) {
+                        context.push('/admin/bookings/$referenceId');
+                      } else {
+                        context.push('/bookings/$referenceId');
+                      }
                     }
                   },
                   child: Container(

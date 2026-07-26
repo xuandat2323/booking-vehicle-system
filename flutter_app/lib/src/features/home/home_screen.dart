@@ -556,6 +556,7 @@ class _AdminHome extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
+    final unreadAsync = ref.watch(unreadCountProvider);
 
     final tiles = [
       ('Người dùng', 'Quản lý tài khoản hệ thống', Icons.people_outline_rounded, '/admin/users'),
@@ -575,7 +576,27 @@ class _AdminHome extends ConsumerWidget {
             AppSpacing.xxl,
           ),
           children: [
-            Text('GoRento Admin', style: tt.headlineMedium?.copyWith(fontWeight: FontWeight.w800)),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'GoRento Admin',
+                    style: tt.headlineMedium?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+                IconButton(
+                  tooltip: 'Thông báo',
+                  onPressed: () => context.push('/notifications'),
+                  icon: Badge(
+                    isLabelVisible: (unreadAsync.valueOrNull ?? 0) > 0,
+                    label: Text('${unreadAsync.valueOrNull ?? 0}'),
+                    child: const Icon(Icons.notifications_outlined),
+                  ),
+                ),
+              ],
+            ),
             const SizedBox(height: AppSpacing.sm),
             Text('Quản trị hệ thống thuê xe', style: tt.bodyMedium),
             const SizedBox(height: AppSpacing.section),

@@ -8,6 +8,7 @@ import vehicle.booking.service.InvoiceService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
@@ -28,7 +29,8 @@ public class InvoiceController {
             @RequestParam(defaultValue = "10") int size,
             Authentication authentication) {
 
-        Pageable pageable = PageRequest.of(page, Math.min(size, 50));
+        Pageable pageable = PageRequest.of(
+                page, Math.min(size, 50), Sort.by(Sort.Direction.DESC, "createAt"));
 
         return ResponseEntity.ok(new ApiResponse<>(
                 true,

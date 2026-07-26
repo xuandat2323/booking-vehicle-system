@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../core/network/dio_provider.dart';
 import '../../core/theme/app_theme.dart';
@@ -182,18 +183,17 @@ class _AdminBookingsScreenState extends ConsumerState<AdminBookingsScreen> {
     final bookingId = booking['bookingId'];
     final carName = booking['carName']?.toString() ?? '';
 
+    if (action == 'cancel') {
+      await _handleCancel(context, bookingId, carName);
+      return;
+    }
+
     final (title, endpoint, confirmMsg, successLabel) = switch (action) {
       'confirm' => (
           'Duyệt đơn cọc',
           '/api/admin/bookings/$bookingId/confirm',
           'Xác nhận đã nhận cọc và duyệt đơn giữ xe "$carName"?',
           'duyệt cọc',
-        ),
-      'cancel' => (
-          'Hủy đơn',
-          '/api/admin/bookings/$bookingId/cancel',
-          'Hủy đơn đặt xe "$carName"? Hành động này không thể hoàn tác.',
-          'hủy',
         ),
       'handover' => (
           'Bàn giao xe',
@@ -230,10 +230,6 @@ class _AdminBookingsScreenState extends ConsumerState<AdminBookingsScreen> {
             child: const Text('Huỷ'),
           ),
           FilledButton(
-            style: action == 'cancel'
-                ? FilledButton.styleFrom(
-                    backgroundColor: Theme.of(dialogContext).colorScheme.error)
-                : null,
             onPressed: () => Navigator.of(dialogContext).pop(true),
             child: Text(title),
           ),
@@ -242,7 +238,40 @@ class _AdminBookingsScreenState extends ConsumerState<AdminBookingsScreen> {
     );
 
     if (confirmed != true || !context.mounted) return;
+    await _runAdminAction(context, endpoint, successLabel, carName);
+  }
 
+  Future<void> _handleCancel(
+    BuildContext context,
+    dynamic bookingId,
+    String carName,
+  ) async {
+    final result = await showDialog<({String reason, String handling})>(
+      context: context,
+      useRootNavigator: true,
+      builder: (dialogContext) => _CancelBookingDialog(carName: carName),
+    );
+    if (result == null || !context.mounted) return;
+
+    await _runAdminAction(
+      context,
+      '/api/admin/bookings/$bookingId/cancel',
+      'hủy',
+      carName,
+      body: {
+        'reason': result.reason,
+        'handling': result.handling,
+      },
+    );
+  }
+
+  Future<void> _runAdminAction(
+    BuildContext context,
+    String endpoint,
+    String successLabel,
+    String carName, {
+    Map<String, dynamic>? body,
+  }) async {
     showDialog<void>(
       context: context,
       barrierDismissible: false,
@@ -251,7 +280,7 @@ class _AdminBookingsScreenState extends ConsumerState<AdminBookingsScreen> {
     );
 
     try {
-      await ref.read(dioProvider).put(endpoint);
+      await ref.read(dioProvider).put(endpoint, data: body);
       if (context.mounted) {
         Navigator.of(context, rootNavigator: true).pop(); // loading
       }
@@ -285,8 +314,6 @@ class _BookingCard extends StatefulWidget {
 }
 
 class _BookingCardState extends State<_BookingCard> {
-  bool _expanded = false;
-
   String _formatPrice(dynamic value) {
     if (value == null) return '0 đ';
     final n = (value is num)
@@ -327,22 +354,31 @@ class _BookingCardState extends State<_BookingCard> {
     final showComplete = status == 'RETURNED';
     final hasActions = showConfirm || showCancel || showHandover || showReturn || showComplete;
 
-    return GestureDetector(
-      onTap: hasActions ? () => setState(() => _expanded = !_expanded) : null,
-      child: Container(
-        decoration: BoxDecoration(
-          color: cs.surfaceContainerLowest,
-          borderRadius: BorderRadius.circular(AppTheme.radiusCard),
-          boxShadow: [AppTheme.softShadow],
-          border: status == 'PENDING'
-              ? Border.all(
-                  color: Colors.orange.withValues(alpha: 0.35), width: 1)
-              : null,
-        ),
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+    return Container(
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerLowest,
+        borderRadius: BorderRadius.circular(AppTheme.radiusCard),
+        boxShadow: [AppTheme.softShadow],
+        border: status == 'PENDING'
+            ? Border.all(
+                color: Colors.orange.withValues(alpha: 0.35), width: 1)
+            : null,
+      ),
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          InkWell(
+            onTap: () {
+              final id = b['bookingId'];
+              if (id != null) {
+                context.push('/admin/bookings/$id');
+              }
+            },
+            borderRadius: BorderRadius.circular(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
             // ── Header row ──
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -369,7 +405,9 @@ class _BookingCardState extends State<_BookingCard> {
                           const SizedBox(width: 4),
                           Expanded(
                             child: Text(
-                              b['renterName']?.toString() ?? '',
+                              b['userName']?.toString()
+                                  ?? b['renterName']?.toString()
+                                  ?? '',
                               style:
                                   tt.bodySmall?.copyWith(color: cs.outline),
                               overflow: TextOverflow.ellipsis,
@@ -419,8 +457,56 @@ class _BookingCardState extends State<_BookingCard> {
               ],
             ),
 
-            // ── Expandable action buttons ──
-            if (hasActions && _expanded) ...[
+            if (status == 'CANCELLED' &&
+                ((b['cancelReason']?.toString().isNotEmpty ?? false) ||
+                    (b['cancelHandling']?.toString().isNotEmpty ?? false))) ...[
+              const SizedBox(height: 10),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.red.withValues(alpha: 0.06),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.red.withValues(alpha: 0.2)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (b['cancelReason']?.toString().isNotEmpty ?? false)
+                      Text(
+                        'Lý do hủy: ${b['cancelReason']}',
+                        style: tt.bodySmall?.copyWith(color: Colors.red.shade800),
+                      ),
+                    if (b['cancelHandling']?.toString().isNotEmpty ?? false) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        'Hướng xử lý: ${b['cancelHandling']}',
+                        style: tt.bodySmall?.copyWith(color: Colors.red.shade800),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+
+            const SizedBox(height: 8),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.open_in_new_rounded, size: 14, color: cs.outline),
+                const SizedBox(width: 4),
+                Text(
+                  'Nhấn để xem chi tiết',
+                  style: tt.labelSmall?.copyWith(color: cs.outline),
+                ),
+              ],
+            ),
+              ],
+            ),
+          ),
+
+            // ── Action buttons ──
+            if (hasActions) ...[
               const SizedBox(height: 12),
               Divider(color: cs.outlineVariant.withValues(alpha: 0.3)),
               const SizedBox(height: 10),
@@ -466,26 +552,8 @@ class _BookingCardState extends State<_BookingCard> {
                 ],
               ),
             ],
-
-            // ── Tap hint ──
-            if (hasActions && !_expanded) ...[
-              const SizedBox(height: 8),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.expand_more_rounded,
-                      size: 16, color: cs.outline),
-                  const SizedBox(width: 4),
-                  Text(
-                    'Nhấn để xem thao tác',
-                    style: tt.labelSmall?.copyWith(color: cs.outline),
-                  ),
-                ],
-              ),
-            ],
           ],
         ),
-      ),
     );
   }
 }
@@ -549,6 +617,96 @@ class _ActionButton extends StatelessWidget {
         minimumSize: Size.zero,
         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
       ),
+    );
+  }
+}
+
+class _CancelBookingDialog extends StatefulWidget {
+  const _CancelBookingDialog({required this.carName});
+
+  final String carName;
+
+  @override
+  State<_CancelBookingDialog> createState() => _CancelBookingDialogState();
+}
+
+class _CancelBookingDialogState extends State<_CancelBookingDialog> {
+  final _formKey = GlobalKey<FormState>();
+  final _reasonCtrl = TextEditingController();
+  final _handlingCtrl = TextEditingController();
+
+  @override
+  void dispose() {
+    _reasonCtrl.dispose();
+    _handlingCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return AlertDialog(
+      title: const Text('Hủy đơn thuê'),
+      content: SizedBox(
+        width: 420,
+        child: Form(
+          key: _formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Hủy đơn "${widget.carName}". Chỉ hủy trước khi bàn giao xe.',
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _reasonCtrl,
+                maxLines: 2,
+                maxLength: 500,
+                decoration: const InputDecoration(
+                  labelText: 'Lý do hủy *',
+                  hintText: 'VD: Khách yêu cầu hủy, xe hỏng, trùng lịch...',
+                  border: OutlineInputBorder(),
+                ),
+                validator: (v) =>
+                    (v == null || v.trim().isEmpty) ? 'Nhập lý do hủy' : null,
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _handlingCtrl,
+                maxLines: 2,
+                maxLength: 500,
+                decoration: const InputDecoration(
+                  labelText: 'Hướng xử lý *',
+                  hintText: 'VD: Hoàn cọc 100%, giữ 30% phí hủy...',
+                  border: OutlineInputBorder(),
+                ),
+                validator: (v) => (v == null || v.trim().isEmpty)
+                    ? 'Nhập hướng xử lý'
+                    : null,
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Đóng'),
+        ),
+        FilledButton(
+          style: FilledButton.styleFrom(backgroundColor: cs.error),
+          onPressed: () {
+            if (!_formKey.currentState!.validate()) return;
+            Navigator.of(context).pop((
+              reason: _reasonCtrl.text.trim(),
+              handling: _handlingCtrl.text.trim(),
+            ));
+          },
+          child: const Text('Xác nhận hủy'),
+        ),
+      ],
     );
   }
 }

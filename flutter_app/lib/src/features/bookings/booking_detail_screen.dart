@@ -4,6 +4,8 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/network/dio_provider.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/utils/toast_utils.dart';
+import '../admin/admin_bookings_screen.dart';
 import '../cars/car_list_screen.dart';
 import '../invoices/invoice_list_screen.dart';
 import 'booking_history_screen.dart';
@@ -19,11 +21,15 @@ final bookingRealtimeStatusProvider =
 
 final bookingDetailProvider =
     FutureProvider.autoDispose.family<Map<String, dynamic>, String>(
-        (ref, bookingId) async {
-  // Watch revision → mỗi BOOKING_UPDATED buộc gọi lại GET /api/bookings/{id}.
+        (ref, key) async {
+  // Watch revision → mỗi BOOKING_UPDATED buộc gọi lại GET chi tiết.
   ref.watch(bookingRealtimeRevisionProvider);
+  final isAdmin = key.startsWith('admin:');
+  final bookingId = isAdmin ? key.substring(6) : key;
   final dio = ref.read(dioProvider);
-  final response = await dio.get('/api/bookings/$bookingId');
+  final response = await dio.get(
+    isAdmin ? '/api/admin/bookings/$bookingId' : '/api/bookings/$bookingId',
+  );
   final data = Map<String, dynamic>.from(response.data['data'] as Map);
 
   // Nếu SSE mang status mới hơn response (race hiếm), ưu tiên status realtime.
@@ -46,17 +52,27 @@ final bookingReviewProvider = FutureProvider.family<Map<String, dynamic>?, Strin
 });
 
 class BookingDetailScreen extends ConsumerWidget {
-  const BookingDetailScreen({super.key, required this.bookingId});
+  const BookingDetailScreen({
+    super.key,
+    required this.bookingId,
+    this.isAdmin = false,
+  });
 
   final String bookingId;
+  final bool isAdmin;
+
+  String get _detailKey => isAdmin ? 'admin:$bookingId' : bookingId;
 
   /// Danh sách chuyến đi / hoá đơn nằm trong shell tab nên không tự refetch,
   /// phải invalidate sau mỗi hành động thay đổi trạng thái đơn.
   void _refreshLists(WidgetRef ref) {
-    ref.invalidate(bookingDetailProvider(bookingId));
+    ref.invalidate(bookingDetailProvider(_detailKey));
     ref.invalidate(bookingHistoryProvider);
     ref.invalidate(invoiceListProvider);
     ref.invalidate(carListProvider);
+    if (isAdmin) {
+      ref.invalidate(adminBookingsProvider);
+    }
   }
 
   Future<void> _cancel(BuildContext context, WidgetRef ref) async {
@@ -108,9 +124,7 @@ class BookingDetailScreen extends ConsumerWidget {
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Lỗi tạo thanh toán: $e')),
-        );
+        ToastUtils.showError(context, e);
       }
     }
   }
@@ -162,8 +176,48 @@ class BookingDetailScreen extends ConsumerWidget {
     }
   }
 
-  /// Banner lưu ý theo từng trạng thái đơn (phía khách).
+  /// Banner lưu ý theo từng trạng thái đơn.
   (IconData, Color, String)? _statusNotice(String status, ColorScheme cs) {
+    if (isAdmin) {
+      return switch (status) {
+        'PENDING' => (
+            Icons.info_outline_rounded,
+            cs.secondary,
+            'Khách chưa đặt cọc. Đơn sẽ tự hủy nếu quá hạn thanh toán.',
+          ),
+        'DEPOSIT_PAID' => (
+            Icons.hourglass_top_rounded,
+            Colors.orange,
+            'Khách đã đặt cọc. Hãy duyệt đơn trên danh sách quản lý.',
+          ),
+        'CONFIRMED' => (
+            Icons.check_circle_outline_rounded,
+            cs.primary,
+            'Đơn đã duyệt. Có thể bàn giao xe khi khách đến nhận.',
+          ),
+        'RENTING' || 'IN_PROGRESS' => (
+            Icons.directions_car_filled_rounded,
+            const Color(0xFF6750A4),
+            'Khách đang thuê xe.',
+          ),
+        'RETURNED' => (
+            Icons.pending_actions_rounded,
+            Colors.teal,
+            'Khách đã trả xe. Hãy kiểm tra và hoàn tất đơn.',
+          ),
+        'COMPLETED' => (
+            Icons.task_alt_rounded,
+            cs.tertiaryContainer,
+            'Đơn đã hoàn tất.',
+          ),
+        'CANCELLED' => (
+            Icons.cancel_outlined,
+            cs.error,
+            'Đơn đã bị hủy.',
+          ),
+        _ => null,
+      };
+    }
     return switch (status) {
       'PENDING' => (
           Icons.info_outline_rounded,
@@ -206,17 +260,33 @@ class BookingDetailScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final bookingAsync = ref.watch(bookingDetailProvider(bookingId));
+    final bookingAsync = ref.watch(bookingDetailProvider(_detailKey));
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Chi tiết đơn thuê')),
+      appBar: AppBar(
+        title: Text(isAdmin ? 'Chi tiết đơn (Admin)' : 'Chi tiết đơn thuê'),
+      ),
       body: bookingAsync.when(
         data: (booking) {
           final status = booking['status']?.toString() ?? '';
           final statusColor = _statusColor(status, cs);
-          final notice = _statusNotice(status, cs);
+          var notice = _statusNotice(status, cs);
+          final cancelReason = booking['cancelReason']?.toString();
+          final cancelHandling = booking['cancelHandling']?.toString();
+          if (status == 'CANCELLED' &&
+              ((cancelReason?.isNotEmpty ?? false) ||
+                  (cancelHandling?.isNotEmpty ?? false))) {
+            final parts = <String>['Đơn đã bị hủy.'];
+            if (cancelReason?.isNotEmpty ?? false) {
+              parts.add('Lý do: $cancelReason.');
+            }
+            if (cancelHandling?.isNotEmpty ?? false) {
+              parts.add('Hướng xử lý: $cancelHandling.');
+            }
+            notice = (Icons.cancel_outlined, cs.error, parts.join(' '));
+          }
           
           final priceStr = booking['totalPrice']?.toString() ?? '0';
           int? priceInt = int.tryParse(priceStr.split('.').first);
@@ -231,6 +301,9 @@ class BookingDetailScreen extends ConsumerWidget {
           if (depositInt != null && depositInt >= 1000) {
             formattedDeposit = '${depositInt ~/ 1000}k';
           }
+
+          final userName = booking['userName']?.toString();
+          final userPhone = booking['userPhone']?.toString();
 
           return SingleChildScrollView(
             padding: const EdgeInsets.all(20),
@@ -315,6 +388,20 @@ class BookingDetailScreen extends ConsumerWidget {
                       const SizedBox(height: 24),
                       Divider(color: cs.outlineVariant.withValues(alpha: 0.2)),
                       const SizedBox(height: 16),
+                      if (isAdmin &&
+                          ((userName?.isNotEmpty ?? false) ||
+                              (userPhone?.isNotEmpty ?? false))) ...[
+                        _buildInfoRow(
+                          context,
+                          Icons.person_rounded,
+                          'Khách hàng',
+                          [
+                            if (userName?.isNotEmpty ?? false) userName!,
+                            if (userPhone?.isNotEmpty ?? false) userPhone!,
+                          ].join(' · '),
+                        ),
+                        const SizedBox(height: 16),
+                      ],
                       _buildInfoRow(context, Icons.event_note_rounded, 'Thời gian', '${booking['startDate']} → ${booking['endDate']}'),
                       const SizedBox(height: 16),
                       _buildInfoRow(context, Icons.receipt_long_rounded, 'Mã hóa đơn', booking['invoiceId']?.toString() ?? 'Chưa tạo'),
@@ -381,6 +468,20 @@ class BookingDetailScreen extends ConsumerWidget {
                   const SizedBox(height: 24),
                 ],
 
+                // Admin: quay lại danh sách để thao tác duyệt/hủy/...
+                if (isAdmin) ...[
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      onPressed: () => context.go('/admin/bookings'),
+                      icon: const Icon(Icons.manage_search_rounded),
+                      label: const Text('Mở danh sách để xử lý đơn'),
+                    ),
+                  ),
+                ],
+
+                // User actions only
+                if (!isAdmin) ...[
                 // Actions
                 if (status == 'PENDING' ||
                     status == 'DEPOSIT_PAID' ||
@@ -392,7 +493,7 @@ class BookingDetailScreen extends ConsumerWidget {
                     child: OutlinedButton.icon(
                       onPressed: () async {
                         final updated = await context.push<bool>('/bookings/$bookingId/pickup-dropoff');
-                        if (updated == true) ref.invalidate(bookingDetailProvider(bookingId));
+                        if (updated == true) ref.invalidate(bookingDetailProvider(_detailKey));
                       },
                       icon: const Icon(Icons.edit_location_alt_rounded),
                       label: const Text('Thay đổi điểm trả'),
@@ -456,7 +557,7 @@ class BookingDetailScreen extends ConsumerWidget {
                             );
                             if (success == true) {
                               ref.invalidate(bookingReviewProvider(bookingId));
-                              ref.invalidate(bookingDetailProvider(bookingId));
+                              ref.invalidate(bookingDetailProvider(_detailKey));
                             }
                           },
                           child: const Row(
@@ -508,6 +609,7 @@ class BookingDetailScreen extends ConsumerWidget {
                     loading: () => const Center(child: CircularProgressIndicator()),
                     error: (error, stack) => const SizedBox.shrink(),
                   ),
+                ],
                 ],
               ],
             ),

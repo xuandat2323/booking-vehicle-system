@@ -208,6 +208,7 @@ class RealtimeSyncService {
     _ref.invalidate(bookingDetailProvider);
     if (bookingId != null && bookingId.isNotEmpty) {
       _ref.invalidate(bookingDetailProvider(bookingId));
+      _ref.invalidate(bookingDetailProvider('admin:$bookingId'));
     }
   }
 

@@ -11,6 +11,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/network/dio_provider.dart';
 import '../../core/utils/format_utils.dart';
+import '../../core/utils/toast_utils.dart';
 
 /// Màn thanh toán đặt cọc — QR VietQR theo STK + nội dung chuyến thuê.
 class PaymentWebviewScreen extends ConsumerStatefulWidget {
@@ -117,11 +118,12 @@ class _PaymentWebviewScreenState extends ConsumerState<PaymentWebviewScreen> {
         Navigator.of(context).pop(true);
         return;
       }
+      if (mounted) {
+        ToastUtils.showWarning(context, 'Chưa ghi nhận được đặt cọc, vui lòng thử lại');
+      }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Không xác nhận được: $e')),
-        );
+        ToastUtils.showError(context, e);
       }
     }
     if (mounted) setState(() => _confirming = false);

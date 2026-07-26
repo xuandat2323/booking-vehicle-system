@@ -246,6 +246,35 @@ class BookingHistoryScreen extends ConsumerWidget {
                             ],
                           ),
                         ],
+                        if (status == 'CANCELLED' &&
+                            (booking['cancelReason']?.toString().isNotEmpty ?? false)) ...[
+                          const SizedBox(height: AppSpacing.sm),
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(AppSpacing.sm + 2),
+                            decoration: BoxDecoration(
+                              color: cs.error.withValues(alpha: 0.06),
+                              borderRadius: BorderRadius.circular(AppTheme.radiusInput),
+                              border: Border.all(color: cs.error.withValues(alpha: 0.2)),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Lý do hủy: ${booking['cancelReason']}',
+                                  style: tt.bodySmall?.copyWith(color: cs.error),
+                                ),
+                                if (booking['cancelHandling']?.toString().isNotEmpty ?? false) ...[
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    'Hướng xử lý: ${booking['cancelHandling']}',
+                                    style: tt.bodySmall?.copyWith(color: cs.error),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                   ),

@@ -11,6 +11,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -46,7 +47,8 @@ public class BookingController {
             @RequestParam(defaultValue = "10") int size,
             Authentication authentication) {
 
-        Pageable pageable = PageRequest.of(page, Math.min(size, 50));
+        Pageable pageable = PageRequest.of(
+                page, Math.min(size, 50), Sort.by(Sort.Direction.DESC, "createdAt"));
 
         return ResponseEntity.ok(new ApiResponse<>(
                 true,

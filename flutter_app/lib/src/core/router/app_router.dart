@@ -94,7 +94,19 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                     initialBranchId: s.uri.queryParameters['branchId'],
                   ),
                 ),
-                GoRoute(path: 'bookings', builder: (c, s) => const AdminBookingsScreen()),
+                GoRoute(
+                  path: 'bookings',
+                  builder: (c, s) => const AdminBookingsScreen(),
+                  routes: [
+                    GoRoute(
+                      path: ':id',
+                      builder: (c, s) => BookingDetailScreen(
+                        bookingId: s.pathParameters['id']!,
+                        isAdmin: true,
+                      ),
+                    ),
+                  ],
+                ),
                 GoRoute(path: 'branches', builder: (c, s) => const AdminBranchesScreen()),
               ],
             ),
