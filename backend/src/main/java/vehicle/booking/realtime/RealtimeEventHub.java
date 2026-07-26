@@ -57,7 +57,9 @@ public class RealtimeEventHub {
                     ), MediaType.APPLICATION_JSON));
         } catch (IOException e) {
             cleanup.run();
-            emitter.completeWithError(e);
+            // Client đã đóng kết nối; hoàn tất bình thường để tránh Tomcat
+            // error-dispatch trên response SSE đã commit.
+            emitter.complete();
         }
         return emitter;
     }
@@ -144,7 +146,9 @@ public class RealtimeEventHub {
                     .data(payload, MediaType.APPLICATION_JSON));
         } catch (Exception e) {
             try {
-                emitter.completeWithError(e);
+                // Broken pipe / proxy timeout là disconnect bình thường của SSE.
+                // completeWithError sẽ dispatch /error sau khi response đã commit.
+                emitter.complete();
             } catch (Exception ignored) {
                 // already completed
             }

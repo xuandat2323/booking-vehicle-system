@@ -4,6 +4,7 @@ import vehicle.booking.filter.JwtAuthenticationFilter;
 import vehicle.booking.filter.MDCLoggingFilter;
 import vehicle.booking.filter.RateLimitingFilter;
 import vehicle.booking.service.CustomUserDetailsService;
+import jakarta.servlet.DispatcherType;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -55,7 +56,11 @@ public class SecurityConfig {
                         .accessDeniedHandler(customAccessDeniedHandler)
                 )
                 .authorizeHttpRequests(auth -> auth
+                        // SSE dùng async dispatch. Khi client/proxy đóng stream, Tomcat dispatch
+                        // ASYNC/ERROR sau khi response đã commit; không chạy authorization lần hai.
+                        .dispatcherTypeMatchers(DispatcherType.ASYNC, DispatcherType.ERROR).permitAll()
                         .requestMatchers(org.springframework.http.HttpMethod.OPTIONS, "/**").permitAll()
+                        .requestMatchers("/error").permitAll()
                         .requestMatchers("/api/auth/**").permitAll()
                         .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
                         .requestMatchers("/api/cars/**").permitAll()

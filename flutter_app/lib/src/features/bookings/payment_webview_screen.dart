@@ -453,15 +453,6 @@ class _QrPaymentCard extends StatelessWidget {
                     ],
                   ),
                 ),
-                if (mockMode)
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: Colors.amber.shade700,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text('DEMO', style: tt.labelSmall?.copyWith(color: Colors.white, fontWeight: FontWeight.w800)),
-                  ),
               ],
             ),
           ),

@@ -163,13 +163,28 @@ class AuthController extends ChangeNotifier {
     }
   }
 
+  Future<void>? _refreshInFlight;
+
   Future<void> logout() async {
     await _repo.clearTokens();
     _isAuthenticated = false;
     notifyListeners();
   }
 
+  /// Nhiều API 401 cùng lúc chỉ được refresh 1 lần (tránh race → token cũ bị xóa → 500/logout).
   Future<void> refreshIfNeeded() async {
+    if (_refreshInFlight != null) {
+      return _refreshInFlight!;
+    }
+    _refreshInFlight = _doRefresh();
+    try {
+      await _refreshInFlight!;
+    } finally {
+      _refreshInFlight = null;
+    }
+  }
+
+  Future<void> _doRefresh() async {
     final refreshToken = await _repo.readRefreshToken();
     if (refreshToken == null || refreshToken.isEmpty) return;
     final tokens = await _repo.refresh(refreshToken: refreshToken);

@@ -33,13 +33,17 @@ public class RefreshTokenService {
 
     @Transactional
     public RefreshToken rotateRefreshToken(String token){
-        RefreshToken refreshToken = refreshTokenRepository.findByToken(token).orElseThrow(() -> new AppException(ErrorCode.AUTH_REFRESH_TOKEN_INVALID));
-        if(refreshToken.isExpired()){
+        RefreshToken refreshToken = refreshTokenRepository.findByToken(token)
+                .orElseThrow(() -> new AppException(ErrorCode.AUTH_REFRESH_TOKEN_INVALID));
+        if (refreshToken.isExpired()) {
             refreshTokenRepository.delete(refreshToken);
             throw new AppException(ErrorCode.AUTH_REFRESH_TOKEN_EXPIRED);
         }
+        // Khởi tạo user trước khi xóa token (JOIN FETCH đã load sẵn).
         User user = refreshToken.getUser();
+        user.getPhone();
         refreshTokenRepository.delete(refreshToken);
+        refreshTokenRepository.flush();
         return createRefreshToken(user);
     }
 

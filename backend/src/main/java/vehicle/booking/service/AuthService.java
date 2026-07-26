@@ -18,6 +18,7 @@ import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Slf4j
 @Service
@@ -123,9 +124,15 @@ public class AuthService {
         );
     }
 
+    @Transactional
     public AuthenticationResponse refresh(RefreshTokenRequest request){
+        if (request == null || request.refreshToken() == null || request.refreshToken().isBlank()) {
+            throw new AppException(ErrorCode.AUTH_REFRESH_TOKEN_INVALID);
+        }
+
         RefreshToken newRefreshToken = refreshTokenService.rotateRefreshToken(request.refreshToken());
 
+        // Phải đọc user trong cùng transaction — tránh LazyInitializationException → HTTP 500.
         User user = newRefreshToken.getUser();
         UserDetails userDetails = userDetailsService.loadUserByUsername(user.getPhone());
         String newAccessToken = jwtService.generateToken(userDetails);

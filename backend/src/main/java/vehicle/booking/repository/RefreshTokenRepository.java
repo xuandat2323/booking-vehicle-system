@@ -10,8 +10,10 @@ import vehicle.booking.entity.RefreshToken;
 import java.util.Optional;
 
 public interface RefreshTokenRepository extends JpaRepository<RefreshToken, Long> {
-    Optional<RefreshToken> findByToken(String token);
-    @Modifying
+    @Query("SELECT rt FROM RefreshToken rt JOIN FETCH rt.user WHERE rt.token = :token")
+    Optional<RefreshToken> findByToken(@Param("token") String token);
+
+    @Modifying(clearAutomatically = true)
     @Query("delete from RefreshToken rt where rt.user.userId = :userId")
     void deleteByUserId(@Param("userId") Long userId);
 }
