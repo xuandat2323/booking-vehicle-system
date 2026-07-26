@@ -1,25 +1,111 @@
+import gc
+import os
 import re
+import threading
+
+import cv2
 import numpy as np
+import torch
 import easyocr
 
+# CRAFT cấp phát ~width*height*64*4 byte. 1120px giữ chữ CCCD/GPLX rõ
+# mà nhanh hơn 1280 và tránh OOM trên máy ~8GB.
+_MAX_OCR_SIDE = 1120
+
 _reader = None
+_reader_lock = threading.Lock()
+# EasyOCR không an toàn khi chạy song song trên máy ít RAM: hai request cùng lúc
+# nhân đôi vùng nhớ đỉnh và cùng chết. Xếp hàng để mỗi lần chỉ giữ một bản.
+_ocr_lock = threading.Lock()
+
 
 def get_reader():
     global _reader
     if _reader is None:
-        _reader = easyocr.Reader(['vi', 'en'], gpu=False)
+        with _reader_lock:
+            if _reader is None:
+                # 1 thread quá chậm; 4 thread trên máy 8GB dễ đỉnh RAM. 2 là cân bằng tốt.
+                threads = max(1, min(2, os.cpu_count() or 2))
+                torch.set_num_threads(threads)
+                _reader = easyocr.Reader(['vi', 'en'], gpu=False, verbose=False)
     return _reader
 
 
-def ocr_image(image_np: np.ndarray) -> dict:
-    """OCR CCCD / GPLX. Chỉ trả code 200 khi đọc được trường bắt buộc.
-
-    Trước đây soft-pass luôn 200 → upload ảnh bất kỳ cũng pass.
-    Giờ: CCCD cần số 12 số; GPLX cần hạng bằng (hoặc số + tên).
-    """
+def warmup() -> None:
+    """Nạp model sẵn lúc start server để lần upload đầu không chờ 10–20s."""
     reader = get_reader()
-    raw = reader.readtext(image_np, detail=0, paragraph=True)
-    text = '\n'.join(raw)
+    blank = np.full((160, 320, 3), 240, dtype=np.uint8)
+    with _ocr_lock:
+        with torch.no_grad():
+            reader.readtext(
+                blank,
+                detail=0,
+                paragraph=False,
+                canvas_size=320,
+                mag_ratio=1.0,
+                min_size=20,
+            )
+
+
+def _resize_for_ocr(image_np: np.ndarray) -> np.ndarray:
+    h, w = image_np.shape[:2]
+    longest = max(h, w)
+    if longest <= _MAX_OCR_SIDE:
+        return image_np
+    scale = _MAX_OCR_SIDE / float(longest)
+    new_w = max(1, int(w * scale))
+    new_h = max(1, int(h * scale))
+    return cv2.resize(image_np, (new_w, new_h), interpolation=cv2.INTER_AREA)
+
+
+def _read_text(image_np: np.ndarray) -> str:
+    with _ocr_lock:
+        reader = get_reader()
+        with torch.no_grad():
+            raw = reader.readtext(
+                image_np,
+                detail=0,
+                paragraph=False,          # gộp đoạn làm chậm, parser của ta dùng regex trên full text
+                decoder='greedy',         # nhanh hơn beamsearch
+                batch_size=1,
+                canvas_size=_MAX_OCR_SIDE,
+                mag_ratio=1.0,
+                min_size=28,              # bỏ box nhiễu nhỏ → ít vòng nhận dạng hơn
+                text_threshold=0.65,
+                low_text=0.35,
+                link_threshold=0.4,
+            )
+        return '\n'.join(raw)
+
+
+def ocr_image(image_np: np.ndarray, expected_type: str | None = None) -> dict:
+    """OCR theo loại giấy tờ mà client đang upload.
+
+    expected_type:
+      - cccd / cccd_front: bắt buộc số 12 số (mặt trước)
+      - cccd_back: nới lỏng hơn (mặt sau)
+      - license / license_front: hạng bằng / số GPLX + tên
+      - license_back: chỉ cần đọc được chữ trên ảnh
+      - None / auto: tự nhận diện (legacy)
+    """
+    try:
+        text = _read_text(_resize_for_ocr(image_np))
+    except (MemoryError, RuntimeError):
+        gc.collect()
+        return {
+            'code': 422,
+            'data': {},
+            'raw_text': '',
+            'message': 'Máy chủ nhận dạng đang thiếu bộ nhớ — vui lòng thử lại sau ít giây',
+        }
+    except Exception as e:
+        gc.collect()
+        return {
+            'code': 422,
+            'data': {},
+            'raw_text': '',
+            'message': f'Không đọc được ảnh giấy tờ — vui lòng thử lại ({type(e).__name__})',
+        }
 
     if not text or len(text.strip()) < 8:
         return {
@@ -29,11 +115,39 @@ def ocr_image(image_np: np.ndarray) -> dict:
             'message': 'Không đọc được chữ trên ảnh — chụp rõ, đủ sáng, không bị cắt',
         }
 
-    doc_type = _detect_type(text)
-    fields = _parse_license(text) if doc_type == 'license' else _parse_cccd(text)
-    fields['doc_type'] = doc_type
+    hint = (expected_type or 'auto').strip().lower()
+    detected = _detect_type(text)
 
-    ok, reason = _is_valid_document(doc_type, fields, text)
+    if hint in ('cccd', 'cccd_front', 'cccd_back'):
+        doc_type = 'cccd'
+        fields = _parse_cccd(text)
+    elif hint in ('license', 'license_front', 'license_back'):
+        doc_type = 'license'
+        fields = _parse_license(text)
+    else:
+        doc_type = detected
+        fields = _parse_license(text) if doc_type == 'license' else _parse_cccd(text)
+
+    fields['doc_type'] = doc_type
+    fields['detected_type'] = detected
+
+    # Sai loại giấy tờ rõ ràng so với bước đang upload
+    if hint in ('cccd', 'cccd_front') and detected == 'license':
+        return {
+            'code': 422,
+            'data': fields,
+            'raw_text': text,
+            'message': 'Ảnh giống bằng lái xe — vui lòng upload mặt trước CCCD',
+        }
+    if hint in ('license', 'license_front') and detected == 'cccd':
+        return {
+            'code': 422,
+            'data': fields,
+            'raw_text': text,
+            'message': 'Ảnh giống CCCD — vui lòng upload mặt trước bằng lái xe',
+        }
+
+    ok, reason = _is_valid_for_step(hint, doc_type, fields, text)
     if not ok:
         return {
             'code': 422,
@@ -50,12 +164,40 @@ def ocr_image(image_np: np.ndarray) -> dict:
     }
 
 
-def _is_valid_document(doc_type: str, fields: dict, text: str) -> tuple[bool, str]:
-    """Trả (ok, message). Ảnh random / không phải giấy tờ sẽ fail tại đây."""
+def _is_valid_for_step(hint: str, doc_type: str, fields: dict, text: str) -> tuple[bool, str]:
     has_id = bool(fields.get('id')) and str(fields.get('id')).isdigit() and len(str(fields['id'])) == 12
     has_name = bool(fields.get('name')) and len(str(fields['name']).strip()) >= 3
     has_class = bool(fields.get('type'))
+    upper = text.upper()
 
+    if hint in ('license', 'license_front'):
+        if has_class and (has_id or has_name):
+            return True, 'ok'
+        if has_id and has_name:
+            return True, 'ok'
+        if has_class:
+            return True, 'ok'
+        return False, 'Không nhận ra bằng lái — cần thấy hạng (A1/B1/B2…) hoặc số GPLX + họ tên'
+
+    if hint == 'license_back':
+        if len(text.strip()) >= 12:
+            return True, 'ok'
+        return False, 'Không nhận dạng được mặt sau bằng lái — chụp lại rõ hơn'
+
+    if hint == 'cccd_back':
+        looks_cccd = any(kw in upper for kw in _CCCD_KW) or has_id or has_name
+        if looks_cccd or fields.get('expiry') or fields.get('home') or fields.get('issue_date'):
+            return True, 'ok'
+        if len(text.strip()) >= 20:
+            return True, 'ok'
+        return False, 'Không nhận dạng được mặt sau CCCD — chụp lại rõ hơn'
+
+    if hint in ('cccd', 'cccd_front'):
+        if has_id:
+            return True, 'ok'
+        return False, 'Không đọc được số CCCD 12 số — chụp rõ phần số căn cước'
+
+    # auto / legacy
     if doc_type == 'license':
         if has_class and (has_id or has_name):
             return True, 'ok'
@@ -63,11 +205,8 @@ def _is_valid_document(doc_type: str, fields: dict, text: str) -> tuple[bool, st
             return True, 'ok'
         return False, 'Không nhận ra bằng lái — cần thấy hạng (A1/B1/B2…) hoặc số GPLX + họ tên'
 
-    # CCCD / mặc định
     if has_id:
         return True, 'ok'
-    # Mặt sau CCCD đôi khi không có đủ 12 số rõ — chấp nhận nếu có từ khoá CCCD + ngày/địa chỉ
-    upper = text.upper()
     looks_cccd = any(kw in upper for kw in _CCCD_KW)
     if looks_cccd and (fields.get('expiry') or fields.get('home') or fields.get('issue_date') or has_name):
         return True, 'ok'
@@ -76,24 +215,33 @@ def _is_valid_document(doc_type: str, fields: dict, text: str) -> tuple[bool, st
 
 # ── Document type detection ───────────────────────────────────────────────────
 
-_CCCD_KW    = ['CĂN CƯỚC', 'CCCD', 'CÔNG DÂN', 'CITIZEN', 'IDENTITY CARD', 'CAN CUOC']
-_LICENSE_KW = ['GIẤY PHÉP LÁI XE', 'GPLX', 'DRIVER', 'LÁI XE']
-_CLASS_RE   = re.compile(r'\b(A1|A2|B1|B2|[CDEF])\b', re.IGNORECASE)
+_CCCD_KW = [
+    'CĂN CƯỚC', 'CCCD', 'CÔNG DÂN', 'CITIZEN', 'IDENTITY CARD',
+    'CAN CUOC', 'CĂN CƯỚC CÔNG DÂN',
+    # Mặt sau CCCD thường có MRZ / chip / đặc điểm nhân dạng
+    'CHARACTERISTICS', 'ĐẶC ĐIỂM', 'DAC DIEM', 'PERSONAL IDENTIFICATION',
+    'QR', 'CHIP', 'IDVNM', 'VNM',
+]
+_LICENSE_KW = [
+    'GIẤY PHÉP LÁI XE', 'GPLX', 'DRIVER', 'LÁI XE', 'DRIVING',
+    'LICENCE', 'LICENSE', 'PERMIS', 'HẠNG',
+]
+_CLASS_RE = re.compile(r'\b(A1|A2|B1|B2|[CDEF])\b', re.IGNORECASE)
 
 
 def _detect_type(text: str) -> str:
     upper = text.upper()
-    for kw in _CCCD_KW:
-        if kw in upper:
-            return 'cccd'
-    for kw in _LICENSE_KW:
-        if kw in upper:
-            return 'license'
-    # If a license class appears early in the text → likely a license
-    m = _CLASS_RE.search(text[:300])
-    if m:
+    lic_hits = sum(1 for kw in _LICENSE_KW if kw in upper)
+    cccd_hits = sum(1 for kw in _CCCD_KW if kw in upper)
+    class_hit = bool(_CLASS_RE.search(text[:400]))
+
+    if lic_hits > cccd_hits or (class_hit and lic_hits >= cccd_hits):
         return 'license'
-    return 'cccd'
+    if cccd_hits > 0:
+        return 'cccd'
+    if class_hit:
+        return 'license'
+    return 'unknown'
 
 
 # ── Shared helpers ────────────────────────────────────────────────────────────
@@ -111,7 +259,6 @@ def _extract_date(text: str, labels: list[str]) -> str | None:
         )
         if m:
             return _nd(m.group(1))
-    # Fallback: any DD/MM/YYYY standalone
     m = re.search(r'\b(\d{2}/\d{2}/\d{4})\b', text)
     return _nd(m.group(1)) if m else None
 
@@ -169,28 +316,20 @@ def _parse_cccd(text: str) -> dict:
 # ── Driving license parser ────────────────────────────────────────────────────
 
 def _parse_license(text: str) -> dict:
-    """
-    Parse Vietnamese Giấy phép lái xe.
-    Fields differ from CCCD: license class, issuing authority, nationality.
-    """
     result = {}
 
-    # ID / license number — 12 digits
     m = re.search(r'\b(\d{12})\b', text)
     if m:
         result['id'] = m.group(1)
 
-    # Full name
     n = _extract_name(text, ['Họ và tên', 'Họ tên', 'Full name', 'HỌ VÀ TÊN', 'HỌ TÊN'])
     if n:
         result['name'] = n
 
-    # Date of birth
     d = _extract_date(text, ['Ngày sinh', 'Date of birth', 'sinh'])
     if d:
         result['birth_day'] = d
 
-    # License class — A1, A2, B1, B2, C, D, E, F (may have multiple separated by comma)
     m = re.search(
         r'(?:Hạng|Hang|Class|HẠNG|LOẠI)[:\s]*([A-F][12]?(?:[,;\s/]+[A-F][12]?)*)',
         text, re.IGNORECASE,
@@ -198,12 +337,10 @@ def _parse_license(text: str) -> dict:
     if m:
         result['type'] = m.group(1).strip().upper()
     else:
-        # Fallback: isolated class letter near keywords
         m = _CLASS_RE.search(text)
         if m:
             result['type'] = m.group(0).upper()
 
-    # Expiry
     m = re.search(
         r'(?:Có giá trị đến|Valid until|Date of expiry|giá trị đến|đến ngày|Hết hạn)[:\s]*(\d{1,2}[/\-\.]\d{1,2}[/\-\.]\d{4})',
         text, re.IGNORECASE,
@@ -211,7 +348,6 @@ def _parse_license(text: str) -> dict:
     if m:
         result['expiry'] = _nd(m.group(1))
 
-    # Issue date
     m = re.search(
         r'(?:Ngày cấp|Date of issue|Cấp ngày)[:\s]*(\d{1,2}[/\-\.]\d{1,2}[/\-\.]\d{4})',
         text, re.IGNORECASE,
@@ -219,7 +355,6 @@ def _parse_license(text: str) -> dict:
     if m:
         result['issue_date'] = _nd(m.group(1))
 
-    # Issuing authority / nơi cấp
     m = re.search(
         r'(?:Nơi cấp|Issued by|Cơ quan cấp)[:\s]*([^\n]{5,80})',
         text, re.IGNORECASE,
@@ -227,12 +362,10 @@ def _parse_license(text: str) -> dict:
     if m:
         result['home'] = m.group(1).strip()
 
-    # Nationality
     m = re.search(r'(?:Quốc tịch|Nationality)[:\s]*([^\n]{2,30})', text, re.IGNORECASE)
     if m:
         result['nationality'] = m.group(1).strip()
 
-    # Residence / address
     m = re.search(r'(?:Nơi cư trú|Địa chỉ|Address)[:\s]*([^\n]{5,100})', text, re.IGNORECASE)
     if m:
         result['address'] = m.group(1).strip()

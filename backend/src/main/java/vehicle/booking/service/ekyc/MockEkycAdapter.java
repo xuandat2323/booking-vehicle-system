@@ -17,17 +17,29 @@ public class MockEkycAdapter implements EkycProvider {
 
     @Override
     public Map<String, Object> ocrIdCard(MultipartFile file) {
+        return ocrDocument(file, "cccd");
+    }
+
+    @Override
+    public Map<String, Object> ocrDocument(MultipartFile file, String expectedDocType) {
         requireImage(file);
         Map<String, Object> data = new LinkedHashMap<>();
-        data.put("id", "079" + String.format("%09d", Math.abs(UUID.randomUUID().hashCode() % 1_000_000_000)));
+        String id = "079" + String.format("%09d", Math.abs(UUID.randomUUID().hashCode() % 1_000_000_000));
+        data.put("id", id);
         data.put("name", "NGUYEN VAN A");
         data.put("birth_day", "01/01/1995");
         data.put("home", "Ha Noi, Viet Nam");
         data.put("issue_date", "15/08/2021");
         data.put("expiry", "01/01/2035");
-        data.put("type", "B2");
-        data.put("barcode", data.get("id"));
-        log.info("MockEkyc OCR ok for file={} size={}", safeName(file), file.getSize());
+        data.put("barcode", id);
+        String type = expectedDocType == null ? "cccd" : expectedDocType.toLowerCase();
+        if (type.startsWith("license")) {
+            data.put("type", "B2");
+            data.put("doc_type", "license");
+        } else {
+            data.put("doc_type", "cccd");
+        }
+        log.info("MockEkyc OCR ok type={} file={} size={}", type, safeName(file), file.getSize());
         return Map.of("code", 200, "message", "OCR mock success", "data", data);
     }
 

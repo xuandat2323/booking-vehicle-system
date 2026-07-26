@@ -38,7 +38,12 @@ public class EkycService {
     }
 
     public Map<String, Object> ocrIdCard(MultipartFile file) {
-        return invoke("ocrIdCard", () -> provider.ocrIdCard(file), false);
+        return ocrDocument(file, null);
+    }
+
+    public Map<String, Object> ocrDocument(MultipartFile file, String expectedDocType) {
+        return invoke("ocrDocument/" + (expectedDocType == null ? "auto" : expectedDocType),
+                () -> provider.ocrDocument(file, expectedDocType), false);
     }
 
     public Map<String, Object> spoofCheck(MultipartFile file) {

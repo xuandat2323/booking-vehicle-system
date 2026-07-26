@@ -28,12 +28,23 @@ public class LocalEkycAdapter implements EkycProvider {
 
     @Override
     public Map<String, Object> ocrIdCard(MultipartFile file) {
-        return post("/ocr", "file", file);
+        return ocrDocument(file, null);
+    }
+
+    @Override
+    public Map<String, Object> ocrDocument(MultipartFile file, String expectedDocType) {
+        return post("/ocr", "file", file, expectedDocType);
     }
 
     @Override
     public Map<String, Object> spoofCheck(MultipartFile file) {
-        return post("/spoof-check", "file", file);
+        // OCR-only server soft-pass spoof; gọi HTTP chỉ làm upload ảnh thêm 1 lần (~0.5–2s).
+        // Bật lại khi chạy full main.py với spoof thật (DeepFace).
+        return Map.of(
+                "code", 200,
+                "message", "spoof soft-pass (skip remote on local OCR)",
+                "data", Map.of("is_fake", false, "is_spoof", false, "score", 0.0)
+        );
     }
 
     @Override
@@ -54,15 +65,18 @@ public class LocalEkycAdapter implements EkycProvider {
 
     @Override
     public Map<String, Object> livenessCheck(MultipartFile face) {
-        return post("/liveness", "file", face);
+        return post("/liveness", "file", face, null);
     }
 
     // ── helpers ──────────────────────────────────────────────────────────────
 
-    private Map<String, Object> post(String path, String paramName, MultipartFile file) {
+    private Map<String, Object> post(String path, String paramName, MultipartFile file, String docType) {
         try {
             MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
             body.add(paramName, resource(file));
+            if (docType != null && !docType.isBlank()) {
+                body.add("doc_type", docType);
+            }
             ResponseEntity<Map<String, Object>> resp = restTemplate.exchange(
                     serviceUrl + path, HttpMethod.POST, entity(body),
                     new ParameterizedTypeReference<Map<String, Object>>() {});

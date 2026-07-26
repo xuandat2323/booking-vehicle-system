@@ -145,8 +145,8 @@ public enum ErrorCode {
     ),
     CAR_IMAGE_UPLOAD_FAILED(
             "CAR_IMAGE_UPLOAD_FAILED",
-            "Tải ảnh lên thất bại. Vui lòng thử lại.",
-            HttpStatus.INTERNAL_SERVER_ERROR
+            "Tải ảnh lên thất bại: %s",
+            HttpStatus.BAD_GATEWAY
     ),
     CAR_NOT_OWNER(
             "CAR_NOT_OWNER",

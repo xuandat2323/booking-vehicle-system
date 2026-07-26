@@ -5,6 +5,7 @@ import vehicle.booking.exception.AppException;
 import vehicle.booking.exception.ErrorCode;
 import vehicle.booking.service.ImageStorageService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
@@ -15,6 +16,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class CloudinaryImageStorageServiceImpl implements ImageStorageService {
@@ -42,9 +44,20 @@ public class CloudinaryImageStorageServiceImpl implements ImageStorageService {
             String format = toNullableString(result.get("format"));
             Long bytes = toNullableLong(result.get("bytes"));
 
+            if (url == null || url.isBlank()) {
+                throw new AppException(ErrorCode.CAR_IMAGE_UPLOAD_FAILED, "Cloudinary không trả về URL ảnh.");
+            }
+
             return new StoredImage(url, publicId, format, bytes);
+        } catch (AppException ex) {
+            throw ex;
         } catch (IOException ex) {
-            throw new AppException(ErrorCode.CAR_IMAGE_UPLOAD_FAILED);
+            log.error("Cloudinary IO error for car {}: {}", carId, ex.getMessage());
+            throw new AppException(ErrorCode.CAR_IMAGE_UPLOAD_FAILED, summarizeCloudinaryError(ex));
+        } catch (RuntimeException ex) {
+            // SDK Cloudinary thường ném RuntimeException (sai/disabled key, mạng, quota...)
+            log.error("Cloudinary upload failed for car {}: {}", carId, ex.getMessage());
+            throw new AppException(ErrorCode.CAR_IMAGE_UPLOAD_FAILED, summarizeCloudinaryError(ex));
         }
     }
 
@@ -60,9 +73,30 @@ public class CloudinaryImageStorageServiceImpl implements ImageStorageService {
 
         try {
             cloudinary.uploader().destroy(publicId, options);
-        } catch (IOException ex) {
-            throw new AppException(ErrorCode.CAR_IMAGE_UPLOAD_FAILED);
+        } catch (IOException | RuntimeException ex) {
+            log.warn("Cloudinary delete failed for {}: {}", publicId, ex.getMessage());
+            throw new AppException(ErrorCode.CAR_IMAGE_UPLOAD_FAILED, summarizeCloudinaryError(ex));
         }
+    }
+
+    private String summarizeCloudinaryError(Throwable ex) {
+        String raw = ex.getMessage() == null ? "" : ex.getMessage().toLowerCase(Locale.ROOT);
+        if (raw.contains("disabled api_key") || raw.contains("invalid signature")
+                || raw.contains("unknown api_key") || raw.contains("401")) {
+            return "API key Cloudinary bị vô hiệu hoặc sai. Hãy tạo key mới trên Cloudinary Dashboard.";
+        }
+        if (raw.contains("rate limit") || raw.contains("limit") || raw.contains("quota")) {
+            return "Tài khoản Cloudinary có thể đã hết hạn mức (quota/rate limit).";
+        }
+        if (raw.contains("timeout") || raw.contains("timed out") || raw.contains("connection")) {
+            return "Không kết nối được Cloudinary. Kiểm tra mạng/firewall.";
+        }
+        String msg = ex.getMessage();
+        if (msg == null || msg.isBlank()) {
+            return "Vui lòng thử lại.";
+        }
+        // Giữ ngắn, không dump stack.
+        return msg.length() > 160 ? msg.substring(0, 160) + "…" : msg;
     }
 
     private void validateUploadInput(MultipartFile file, Long carId) {
@@ -70,10 +104,34 @@ public class CloudinaryImageStorageServiceImpl implements ImageStorageService {
             throw new AppException(ErrorCode.COMMON_BAD_REQUEST);
         }
 
-        String mimeType = normalizeMimeType(file.getContentType());
+        String mimeType = resolveMimeType(file);
         if (!ALLOWED_MIME_TYPES.contains(mimeType)) {
             throw new AppException(ErrorCode.CAR_IMAGE_INVALID_FILE_TYPE);
         }
+    }
+
+    /**
+     * Dio/Android hay gửi part với content-type null hoặc application/octet-stream.
+     * Khi đó suy luận từ tên file để không reject nhầm ảnh JPEG/PNG hợp lệ.
+     */
+    private String resolveMimeType(MultipartFile file) {
+        String mimeType = normalizeMimeType(file.getContentType());
+        if (ALLOWED_MIME_TYPES.contains(mimeType)) {
+            return mimeType;
+        }
+
+        String filename = file.getOriginalFilename();
+        if (filename == null) {
+            return mimeType;
+        }
+        String lower = filename.toLowerCase(Locale.ROOT);
+        if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) {
+            return "image/jpeg";
+        }
+        if (lower.endsWith(".png")) {
+            return "image/png";
+        }
+        return mimeType;
     }
 
     private String normalizeMimeType(String mimeType) {
@@ -119,4 +177,3 @@ public class CloudinaryImageStorageServiceImpl implements ImageStorageService {
         }
     }
 }
-

@@ -17,7 +17,8 @@ class BookingCreateScreen extends ConsumerStatefulWidget {
   final String carId;
 
   @override
-  ConsumerState<BookingCreateScreen> createState() => _BookingCreateScreenState();
+  ConsumerState<BookingCreateScreen> createState() =>
+      _BookingCreateScreenState();
 }
 
 class _BookingCreateScreenState extends ConsumerState<BookingCreateScreen> {
@@ -44,18 +45,27 @@ class _BookingCreateScreenState extends ConsumerState<BookingCreateScreen> {
       final lat = (car['latitude'] as num?)?.toDouble();
       final lng = (car['longitude'] as num?)?.toDouble();
       final branchName = car['branchName']?.toString() ?? '';
-      if (lat != null && lng != null && (loc.isNotEmpty || branchName.isNotEmpty)) {
+      if (lat != null &&
+          lng != null &&
+          (loc.isNotEmpty || branchName.isNotEmpty)) {
         final address = branchName.isNotEmpty && loc.isNotEmpty
             ? '$branchName — $loc'
             : (branchName.isNotEmpty ? branchName : loc);
         setState(() {
-          _pickupLocation = PickedLocation(address: address, lat: lat, lng: lng);
-          _dropoffLocation = PickedLocation(address: address, lat: lat, lng: lng);
+          _pickupLocation = PickedLocation(
+            address: address,
+            lat: lat,
+            lng: lng,
+          );
+          _dropoffLocation = PickedLocation(
+            address: address,
+            lat: lat,
+            lng: lng,
+          );
         });
       }
     } catch (_) {}
   }
-
 
   Future<void> _pickDates() async {
     final now = DateTime.now();
@@ -68,11 +78,11 @@ class _BookingCreateScreenState extends ConsumerState<BookingCreateScreen> {
         return Theme(
           data: Theme.of(context).copyWith(
             colorScheme: Theme.of(context).colorScheme.copyWith(
-                  primary: Theme.of(context).colorScheme.primary,
-                  onPrimary: Colors.white,
-                  surface: Theme.of(context).colorScheme.surfaceContainerLowest,
-                  onSurface: Theme.of(context).colorScheme.onSurface,
-                ),
+              primary: Theme.of(context).colorScheme.primary,
+              onPrimary: Colors.white,
+              surface: Theme.of(context).colorScheme.surfaceContainerLowest,
+              onSurface: Theme.of(context).colorScheme.onSurface,
+            ),
           ),
           child: child!,
         );
@@ -85,7 +95,9 @@ class _BookingCreateScreenState extends ConsumerState<BookingCreateScreen> {
 
   Future<void> _submit() async {
     if (_selectedRange == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Vui lòng chọn ngày thuê')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Vui lòng chọn ngày thuê')));
       return;
     }
     if (!_formKey.currentState!.validate()) return;
@@ -93,21 +105,24 @@ class _BookingCreateScreenState extends ConsumerState<BookingCreateScreen> {
     setState(() => _loading = true);
     try {
       final dio = ref.read(dioProvider);
-      final bookingResponse = await dio.post('/api/bookings', data: {
-        'carId': int.parse(widget.carId),
-        'startDate': _selectedRange!.start.toIso8601String().split('T').first,
-        'endDate': _selectedRange!.end.toIso8601String().split('T').first,
-        if (_pickupLocation != null) ...{
-          'pickupAddress': _pickupLocation!.address,
-          'pickupLatitude': _pickupLocation!.lat,
-          'pickupLongitude': _pickupLocation!.lng,
+      final bookingResponse = await dio.post(
+        '/api/bookings',
+        data: {
+          'carId': int.parse(widget.carId),
+          'startDate': _selectedRange!.start.toIso8601String().split('T').first,
+          'endDate': _selectedRange!.end.toIso8601String().split('T').first,
+          if (_pickupLocation != null) ...{
+            'pickupAddress': _pickupLocation!.address,
+            'pickupLatitude': _pickupLocation!.lat,
+            'pickupLongitude': _pickupLocation!.lng,
+          },
+          if (_dropoffLocation != null) ...{
+            'dropoffAddress': _dropoffLocation!.address,
+            'dropoffLatitude': _dropoffLocation!.lat,
+            'dropoffLongitude': _dropoffLocation!.lng,
+          },
         },
-        if (_dropoffLocation != null) ...{
-          'dropoffAddress': _dropoffLocation!.address,
-          'dropoffLatitude': _dropoffLocation!.lat,
-          'dropoffLongitude': _dropoffLocation!.lng,
-        },
-      });
+      );
 
       final bookingData = bookingResponse.data['data'];
       final bookingId = bookingData['bookingId'];
@@ -115,25 +130,45 @@ class _BookingCreateScreenState extends ConsumerState<BookingCreateScreen> {
       // Đơn + hoá đơn đã tồn tại ngay khi tạo booking, nên refresh trước khi rời màn
       _refreshUserData();
 
-      // PayOS deposit payment
-      final paymentUrlResponse = await dio.post('/api/payments/payos/create/$bookingId');
-      final paymentData = Map<String, dynamic>.from(paymentUrlResponse.data['data'] as Map);
-
-      if (mounted) {
-        final success = await context.push<bool>('/payment-webview', extra: paymentData);
-        _refreshUserData();
+      // Đơn đã tạo xong, nên lỗi mở cổng thanh toán không được báo là tạo đơn thất bại:
+      // báo sai khiến người dùng đặt lại và vướng chính đơn PENDING vừa tạo.
+      Map<String, dynamic> paymentData;
+      try {
+        final paymentUrlResponse = await dio.post(
+          '/api/payments/payos/create/$bookingId',
+        );
+        paymentData = Map<String, dynamic>.from(
+          paymentUrlResponse.data['data'] as Map,
+        );
+      } catch (e) {
         if (mounted) {
-          if (success == true) {
-            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Đã đặt cọc giữ xe thành công! 🎉')));
-          } else {
-            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-              content: Text('Đã tạo đơn đặt xe, vui lòng hoàn tất đặt cọc sau trong chi tiết chuyến đi.'),
-              duration: Duration(seconds: 4),
-            ));
-          }
+          ToastUtils.showWarning(
+            context,
+            'Đã tạo đơn #$bookingId nhưng chưa mở được cổng thanh toán. '
+            'Vui lòng đặt cọc lại trong mục Chuyến đi.',
+          );
           context.go('/bookings');
         }
+        return;
       }
+
+      if (!mounted) return;
+      final success = await context.push<bool>(
+        '/payment-webview',
+        extra: paymentData,
+      );
+      _refreshUserData();
+      if (!mounted) return;
+
+      if (success == true) {
+        ToastUtils.showSuccess(context, 'Đã đặt cọc giữ xe thành công!');
+      } else {
+        ToastUtils.showInfo(
+          context,
+          'Đã tạo đơn đặt xe, vui lòng hoàn tất đặt cọc trong chi tiết chuyến đi.',
+        );
+      }
+      context.go('/bookings');
     } catch (e) {
       if (mounted) {
         ToastUtils.showError(context, e);
@@ -156,7 +191,7 @@ class _BookingCreateScreenState extends ConsumerState<BookingCreateScreen> {
     final rangeText = _selectedRange == null
         ? 'Chưa chọn'
         : '${_selectedRange!.start.toLocal().toString().split(' ').first} → ${_selectedRange!.end.toLocal().toString().split(' ').first}';
-    
+
     final days = _selectedRange != null
         ? _selectedRange!.end.difference(_selectedRange!.start).inDays + 1
         : 0;
@@ -193,7 +228,10 @@ class _BookingCreateScreenState extends ConsumerState<BookingCreateScreen> {
                           shape: BoxShape.circle,
                         ),
                         child: IconButton(
-                          icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
+                          icon: const Icon(
+                            Icons.arrow_back_rounded,
+                            color: Colors.white,
+                          ),
                           onPressed: () => context.pop(),
                         ),
                       ),
@@ -246,7 +284,9 @@ class _BookingCreateScreenState extends ConsumerState<BookingCreateScreen> {
                       Container(
                         decoration: BoxDecoration(
                           color: cs.surfaceContainerLowest,
-                          borderRadius: BorderRadius.circular(AppTheme.radiusCard),
+                          borderRadius: BorderRadius.circular(
+                            AppTheme.radiusCard,
+                          ),
                           boxShadow: [AppTheme.ambientShadow],
                         ),
                         padding: const EdgeInsets.all(24),
@@ -255,7 +295,9 @@ class _BookingCreateScreenState extends ConsumerState<BookingCreateScreen> {
                           children: [
                             Text(
                               'Thời gian thuê xe',
-                              style: tt.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+                              style: tt.titleLarge?.copyWith(
+                                fontWeight: FontWeight.w700,
+                              ),
                             ),
                             const SizedBox(height: 4),
                             Text(
@@ -263,39 +305,57 @@ class _BookingCreateScreenState extends ConsumerState<BookingCreateScreen> {
                               style: tt.bodyMedium,
                             ),
                             const SizedBox(height: 24),
-                            
+
                             Container(
                               padding: const EdgeInsets.all(16),
                               decoration: BoxDecoration(
                                 color: cs.surfaceContainerLow,
                                 borderRadius: BorderRadius.circular(16),
-                                border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.3)),
+                                border: Border.all(
+                                  color: cs.outlineVariant.withValues(
+                                    alpha: 0.3,
+                                  ),
+                                ),
                               ),
                               child: Row(
                                 children: [
                                   Container(
                                     padding: const EdgeInsets.all(10),
                                     decoration: BoxDecoration(
-                                      color: cs.primaryContainer.withValues(alpha: 0.2),
+                                      color: cs.primaryContainer.withValues(
+                                        alpha: 0.2,
+                                      ),
                                       shape: BoxShape.circle,
                                     ),
-                                    child: Icon(Icons.date_range_rounded, color: cs.primary, size: 24),
+                                    child: Icon(
+                                      Icons.date_range_rounded,
+                                      color: cs.primary,
+                                      size: 24,
+                                    ),
                                   ),
                                   const SizedBox(width: 16),
                                   Expanded(
                                     child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
                                         Text(
                                           rangeText,
                                           style: tt.titleMedium?.copyWith(
-                                            color: _selectedRange == null ? cs.outline : cs.onSurface,
+                                            color: _selectedRange == null
+                                                ? cs.outline
+                                                : cs.onSurface,
                                             fontWeight: FontWeight.w600,
                                           ),
                                         ),
                                         if (days > 0) ...[
                                           const SizedBox(height: 2),
-                                          Text('Tổng: $days ngày', style: tt.bodySmall?.copyWith(color: cs.primary)),
+                                          Text(
+                                            'Tổng: $days ngày',
+                                            style: tt.bodySmall?.copyWith(
+                                              color: cs.primary,
+                                            ),
+                                          ),
                                         ],
                                       ],
                                     ),
@@ -308,7 +368,11 @@ class _BookingCreateScreenState extends ConsumerState<BookingCreateScreen> {
                               width: double.infinity,
                               child: OutlinedButton(
                                 onPressed: _pickDates,
-                                child: Text(_selectedRange == null ? 'Chọn ngày' : 'Thay đổi ngày'),
+                                child: Text(
+                                  _selectedRange == null
+                                      ? 'Chọn ngày'
+                                      : 'Thay đổi ngày',
+                                ),
                               ),
                             ),
                           ],
@@ -320,7 +384,9 @@ class _BookingCreateScreenState extends ConsumerState<BookingCreateScreen> {
                       Container(
                         decoration: BoxDecoration(
                           color: cs.surfaceContainerLowest,
-                          borderRadius: BorderRadius.circular(AppTheme.radiusCard),
+                          borderRadius: BorderRadius.circular(
+                            AppTheme.radiusCard,
+                          ),
                           boxShadow: [AppTheme.ambientShadow],
                         ),
                         padding: const EdgeInsets.all(24),
@@ -329,7 +395,9 @@ class _BookingCreateScreenState extends ConsumerState<BookingCreateScreen> {
                           children: [
                             Text(
                               'Địa điểm giao nhận xe',
-                              style: tt.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+                              style: tt.titleLarge?.copyWith(
+                                fontWeight: FontWeight.w700,
+                              ),
                             ),
                             const SizedBox(height: 4),
                             Text(
@@ -348,7 +416,8 @@ class _BookingCreateScreenState extends ConsumerState<BookingCreateScreen> {
                                   title: 'Chọn chi nhánh đón xe',
                                   initialLocation: _pickupLocation,
                                 );
-                                if (result != null) setState(() => _pickupLocation = result);
+                                if (result != null)
+                                  setState(() => _pickupLocation = result);
                               },
                             ),
                             const SizedBox(height: 12),
@@ -363,7 +432,8 @@ class _BookingCreateScreenState extends ConsumerState<BookingCreateScreen> {
                                   title: 'Chọn chi nhánh trả xe',
                                   initialLocation: _dropoffLocation,
                                 );
-                                if (result != null) setState(() => _dropoffLocation = result);
+                                if (result != null)
+                                  setState(() => _dropoffLocation = result);
                               },
                             ),
                           ],
@@ -374,12 +444,14 @@ class _BookingCreateScreenState extends ConsumerState<BookingCreateScreen> {
                       GradientButton(
                         onPressed: _loading ? null : _submit,
                         isLoading: _loading,
-                        child: const Text('Gửi yêu cầu thuê xe',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w600,
-                              fontSize: 16,
-                            )),
+                        child: const Text(
+                          'Gửi yêu cầu thuê xe',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 16,
+                          ),
+                        ),
                       ),
                     ],
                   ),
@@ -423,7 +495,9 @@ class _LocationRow extends StatelessWidget {
           color: cs.surfaceContainerLow,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
-            color: hasLocation ? color.withValues(alpha: 0.4) : cs.outlineVariant.withValues(alpha: 0.3),
+            color: hasLocation
+                ? color.withValues(alpha: 0.4)
+                : cs.outlineVariant.withValues(alpha: 0.3),
           ),
         ),
         child: Row(
@@ -441,13 +515,18 @@ class _LocationRow extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(label, style: tt.labelMedium?.copyWith(color: cs.outline)),
+                  Text(
+                    label,
+                    style: tt.labelMedium?.copyWith(color: cs.outline),
+                  ),
                   const SizedBox(height: 2),
                   Text(
                     hasLocation ? address! : 'Nhấn để chọn trên bản đồ',
                     style: tt.bodyMedium?.copyWith(
                       color: hasLocation ? cs.onSurface : cs.outline,
-                      fontWeight: hasLocation ? FontWeight.w500 : FontWeight.normal,
+                      fontWeight: hasLocation
+                          ? FontWeight.w500
+                          : FontWeight.normal,
                     ),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,

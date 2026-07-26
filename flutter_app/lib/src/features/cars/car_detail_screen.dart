@@ -380,10 +380,11 @@ class CarDetailScreen extends ConsumerWidget {
                   ),
                   child: GradientButton(
                     onPressed: () {
-                      if (verifyStatus?['status'] == 'VERIFIED') {
+                      final status = verifyStatus?['status']?.toString();
+                      if (status == 'VERIFIED') {
                         context.push('/cars/$carId/book');
                       } else {
-                        _showVerifyRequired(context);
+                        _showVerifyRequired(context, status);
                       }
                     },
                     child: const Text('Tiếp tục đặt xe', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 16)),
@@ -445,7 +446,22 @@ class CarDetailScreen extends ConsumerWidget {
   }
 }
 
-void _showVerifyRequired(BuildContext context) {
+void _showVerifyRequired(BuildContext context, String? status) {
+  final (title, description) = switch (status) {
+    'PENDING' => (
+        'Hồ sơ đang chờ duyệt',
+        'Hồ sơ xác minh của bạn đang được xử lý. Bạn có thể đặt xe ngay khi hồ sơ được duyệt.',
+      ),
+    'REJECTED' => (
+        'Hồ sơ bị từ chối',
+        'Hồ sơ xác minh chưa đạt. Vui lòng nộp lại ảnh CCCD & bằng lái rõ nét để tiếp tục đặt xe.',
+      ),
+    _ => (
+        'Cần xác minh danh tính',
+        'Bạn cần hoàn tất xác minh CCCD & bằng lái trước khi đặt xe.',
+      ),
+  };
+
   showModalBottomSheet(
     context: context,
     shape: const RoundedRectangleBorder(
@@ -475,12 +491,13 @@ void _showVerifyRequired(BuildContext context) {
                   color: Colors.orange, size: 36),
             ),
             const SizedBox(height: 16),
-            Text('Cần xác minh danh tính',
+            Text(title,
+                textAlign: TextAlign.center,
                 style: Theme.of(context).textTheme.titleLarge
                     ?.copyWith(fontWeight: FontWeight.w700)),
             const SizedBox(height: 8),
             Text(
-              'Bạn cần hoàn tất xác minh CCCD & bằng lái trước khi đặt xe.',
+              description,
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.bodyMedium
                   ?.copyWith(color: Theme.of(context).colorScheme.outline),

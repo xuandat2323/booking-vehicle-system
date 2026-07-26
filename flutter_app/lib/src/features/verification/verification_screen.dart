@@ -95,8 +95,12 @@ class _VerificationScreenState extends ConsumerState<VerificationScreen> {
       {ImageSource source = ImageSource.gallery}) async {
     if (_anyUploading) return;
 
-    final picked =
-        await _picker.pickImage(source: source, imageQuality: 90);
+    final picked = await _picker.pickImage(
+      source: source,
+      maxWidth: 1280,
+      maxHeight: 1280,
+      imageQuality: 75,
+    );
     if (picked == null) return;
 
     final bytes = await picked.readAsBytes();

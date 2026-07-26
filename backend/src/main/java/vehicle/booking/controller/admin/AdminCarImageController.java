@@ -5,6 +5,7 @@ import vehicle.booking.dto.response.CarImageResponse;
 import vehicle.booking.service.CarImageService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
@@ -20,10 +21,10 @@ public class AdminCarImageController {
 
     private final CarImageService carImageService;
 
-    @PostMapping
+    @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<ApiResponse<CarImageResponse>> uploadCarImage(
             @PathVariable Long carId,
-            @RequestPart("file") MultipartFile file
+            @RequestParam("file") MultipartFile file
     ) {
         CarImageResponse response = carImageService.uploadCarImage(carId, file);
         return ResponseEntity.status(HttpStatus.CREATED)
@@ -49,5 +50,14 @@ public class AdminCarImageController {
     ) {
         CarImageResponse response = carImageService.setPrimaryImage(carId, carImageId);
         return ResponseEntity.ok(new ApiResponse<>(true, "Đặt ảnh đại diện thành công", response));
+    }
+
+    @DeleteMapping("/{carImageId}")
+    public ResponseEntity<ApiResponse<Void>> deleteCarImage(
+            @PathVariable Long carId,
+            @PathVariable Long carImageId
+    ) {
+        carImageService.deleteCarImage(carId, carImageId);
+        return ResponseEntity.ok(new ApiResponse<>(true, "Xóa hình ảnh xe thành công", null));
     }
 }

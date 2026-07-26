@@ -1,5 +1,7 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/network/dio_provider.dart';
@@ -198,6 +200,7 @@ class _AdminCarsScreenState extends ConsumerState<AdminCarsScreen> {
                           onChangeStatus: (status) =>
                               _changeStatus(context, car, status),
                           onViewReviews: () => _showCarReviews(context, car),
+                          onManageImages: () => _showCarImages(context, car),
                         ),
                       );
                     },
@@ -311,6 +314,42 @@ class _AdminCarsScreenState extends ConsumerState<AdminCarsScreen> {
               carId: carId,
               carName: carName,
               scrollController: scrollController,
+            );
+          },
+        );
+      },
+    );
+  }
+
+  /// Upload ảnh lên Cloudinary qua BE: POST /api/admin/cars/{id}/images (field `file`).
+  Future<void> _showCarImages(
+    BuildContext context,
+    Map<String, dynamic> car,
+  ) async {
+    final carId = car['id']?.toString();
+    if (carId == null || carId.isEmpty) return;
+    final carName = carDisplayTitle(
+      car['brand']?.toString(),
+      car['name']?.toString(),
+    );
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useRootNavigator: true,
+      showDragHandle: true,
+      builder: (_) {
+        return DraggableScrollableSheet(
+          expand: false,
+          initialChildSize: 0.72,
+          minChildSize: 0.45,
+          maxChildSize: 0.95,
+          builder: (context, scrollController) {
+            return _AdminCarImagesSheet(
+              carId: carId,
+              carName: carName,
+              scrollController: scrollController,
+              onChanged: () => ref.invalidate(adminCarsProvider),
             );
           },
         );
@@ -630,6 +669,7 @@ class _CarCard extends StatelessWidget {
     required this.onDelete,
     required this.onChangeStatus,
     required this.onViewReviews,
+    required this.onManageImages,
   });
 
   final Map<String, dynamic> car;
@@ -637,6 +677,7 @@ class _CarCard extends StatelessWidget {
   final VoidCallback onDelete;
   final ValueChanged<String> onChangeStatus;
   final VoidCallback onViewReviews;
+  final VoidCallback onManageImages;
 
   PopupMenuItem<String> _menuItem(
     String value,
@@ -774,7 +815,9 @@ class _CarCard extends StatelessWidget {
                           splashRadius: 18,
                           icon: Icon(Icons.more_vert_rounded, color: cs.onSurfaceVariant),
                           onSelected: (value) {
-                            if (value == 'reviews') {
+                            if (value == 'images') {
+                              onManageImages();
+                            } else if (value == 'reviews') {
                               onViewReviews();
                             } else if (value == 'edit') {
                               onEdit();
@@ -787,6 +830,7 @@ class _CarCard extends StatelessWidget {
                             }
                           },
                           itemBuilder: (context) => [
+                            _menuItem('images', Icons.photo_library_outlined, 'Quản lý ảnh'),
                             _menuItem('reviews', Icons.rate_review_outlined, 'Xem đánh giá'),
                             _menuItem('edit', Icons.edit_outlined, 'Sửa xe'),
                             if (status == 'AVAILABLE')
@@ -1074,6 +1118,434 @@ class _AdminCarReviewsSheetState extends ConsumerState<_AdminCarReviewsSheet> {
                       ),
                     );
                   },
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Quản lý ảnh xe: upload JPEG/PNG lên Cloudinary qua BE (tối đa 5 ảnh).
+class _AdminCarImagesSheet extends ConsumerStatefulWidget {
+  const _AdminCarImagesSheet({
+    required this.carId,
+    required this.carName,
+    required this.scrollController,
+    required this.onChanged,
+  });
+
+  final String carId;
+  final String carName;
+  final ScrollController scrollController;
+  final VoidCallback onChanged;
+
+  @override
+  ConsumerState<_AdminCarImagesSheet> createState() =>
+      _AdminCarImagesSheetState();
+}
+
+class _AdminCarImagesSheetState extends ConsumerState<_AdminCarImagesSheet> {
+  static const _maxImages = 5;
+  late Future<List<Map<String, dynamic>>> _imagesFuture;
+  bool _uploading = false;
+  String? _statusText;
+  bool _statusIsError = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _imagesFuture = _loadImages();
+  }
+
+  Future<List<Map<String, dynamic>>> _loadImages() async {
+    final dio = ref.read(dioProvider);
+    final response = await dio.get('/api/admin/cars/${widget.carId}/images');
+    final data = response.data['data'];
+    if (data is! List) return [];
+    return data.cast<Map<String, dynamic>>();
+  }
+
+  void _reload() {
+    // Không dùng `=>` vì _loadImages() trả Future — setState sẽ hiểu callback trả Future.
+    final next = _loadImages();
+    setState(() {
+      _imagesFuture = next;
+    });
+    widget.onChanged();
+  }
+
+  void _setStatus(String text, {required bool isError}) {
+    setState(() {
+      _statusText = text;
+      _statusIsError = isError;
+    });
+  }
+
+  Future<void> _pickAndUpload() async {
+    final picker = ImagePicker();
+    final picked = await picker.pickImage(
+      source: ImageSource.gallery,
+      maxWidth: 1600,
+      imageQuality: 85,
+    );
+    if (picked == null || !mounted) return;
+
+    final mime = _resolveImageMime(picked);
+    if (mime == null) {
+      _setStatus('Chỉ hỗ trợ ảnh JPEG hoặc PNG', isError: true);
+      return;
+    }
+
+    setState(() {
+      _uploading = true;
+      _statusText = 'Đang tải lên Cloudinary...';
+      _statusIsError = false;
+    });
+    try {
+      final bytes = await picked.readAsBytes();
+      if (bytes.isEmpty) {
+        throw 'File ảnh trống';
+      }
+
+      final filename = _ensureImageFilename(picked.name, mime);
+      final form = FormData.fromMap({
+        'file': MultipartFile.fromBytes(
+          bytes,
+          filename: filename,
+          contentType: DioMediaType.parse(mime),
+        ),
+      });
+
+      await ref.read(dioProvider).post(
+            '/api/admin/cars/${widget.carId}/images',
+            data: form,
+            options: Options(
+              sendTimeout: const Duration(seconds: 60),
+              receiveTimeout: const Duration(seconds: 60),
+              contentType: null,
+            ),
+          );
+      if (!mounted) return;
+      _setStatus('Tải ảnh thành công', isError: false);
+      _reload();
+    } catch (e) {
+      if (mounted) {
+        _setStatus(ToastUtils.mapError(e), isError: true);
+      }
+    } finally {
+      if (mounted) setState(() => _uploading = false);
+    }
+  }
+
+  /// Android/iOS đôi khi trả name không có đuôi hoặc mime null.
+  String? _resolveImageMime(XFile picked) {
+    final mime = (picked.mimeType ?? '').toLowerCase().trim();
+    if (mime == 'image/jpeg' || mime == 'image/jpg' || mime == 'image/png') {
+      return mime == 'image/jpg' ? 'image/jpeg' : mime;
+    }
+    final name = picked.name.toLowerCase();
+    final path = picked.path.toLowerCase();
+    if (name.endsWith('.jpg') ||
+        name.endsWith('.jpeg') ||
+        path.endsWith('.jpg') ||
+        path.endsWith('.jpeg')) {
+      return 'image/jpeg';
+    }
+    if (name.endsWith('.png') || path.endsWith('.png')) {
+      return 'image/png';
+    }
+    if (!name.contains('.') && (mime.startsWith('image/') || mime.isEmpty)) {
+      return 'image/jpeg';
+    }
+    return null;
+  }
+
+  String _ensureImageFilename(String original, String mime) {
+    final lower = original.toLowerCase();
+    if (lower.endsWith('.jpg') ||
+        lower.endsWith('.jpeg') ||
+        lower.endsWith('.png')) {
+      return original;
+    }
+    return mime == 'image/png' ? 'car.png' : 'car.jpg';
+  }
+
+  Future<void> _setPrimary(Map<String, dynamic> image) async {
+    final imageId = image['id'];
+    if (imageId == null) return;
+    try {
+      await ref.read(dioProvider).patch(
+            '/api/admin/cars/${widget.carId}/images/$imageId/primary',
+          );
+      if (mounted) {
+        ToastUtils.showSuccess(context, 'Đã đặt ảnh đại diện');
+        _reload();
+      }
+    } catch (e) {
+      if (mounted) ToastUtils.showError(context, e);
+    }
+  }
+
+  Future<void> _deleteImage(Map<String, dynamic> image) async {
+    final imageId = image['id'];
+    if (imageId == null) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Xóa ảnh?'),
+        content: const Text('Ảnh sẽ bị xóa khỏi Cloudinary và danh sách xe.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Huỷ'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+            ),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Xóa'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    try {
+      await ref.read(dioProvider).delete(
+            '/api/admin/cars/${widget.carId}/images/$imageId',
+          );
+      if (mounted) {
+        ToastUtils.showSuccess(context, 'Đã xóa ảnh');
+        _reload();
+      }
+    } catch (e) {
+      if (mounted) ToastUtils.showError(context, e);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.page,
+        0,
+        AppSpacing.page,
+        AppSpacing.lg,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'Ảnh xe',
+            style: tt.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            widget.carName,
+            style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'JPEG/PNG · tối đa $_maxImages ảnh · ảnh đầu là đại diện',
+            style: tt.bodySmall?.copyWith(color: cs.outline),
+          ),
+          if (_statusText != null) ...[
+            const SizedBox(height: AppSpacing.sm),
+            Text(
+              _statusText!,
+              style: tt.bodySmall?.copyWith(
+                color: _statusIsError ? cs.error : cs.primary,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+          const SizedBox(height: AppSpacing.md),
+          Expanded(
+            child: FutureBuilder<List<Map<String, dynamic>>>(
+              future: _imagesFuture,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState != ConnectionState.done) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                if (snapshot.hasError) {
+                  return Center(
+                    child: Text(
+                      ToastUtils.mapError(snapshot.error!),
+                      textAlign: TextAlign.center,
+                      style: tt.bodyMedium?.copyWith(color: cs.error),
+                    ),
+                  );
+                }
+
+                final images = snapshot.data ?? [];
+                final canUpload = images.length < _maxImages;
+
+                return Column(
+                  children: [
+                    Expanded(
+                      child: images.isEmpty
+                          ? ListView(
+                              controller: widget.scrollController,
+                              children: [
+                                const SizedBox(height: 48),
+                                Icon(
+                                  Icons.photo_outlined,
+                                  size: 56,
+                                  color: cs.outlineVariant,
+                                ),
+                                const SizedBox(height: AppSpacing.md),
+                                Text(
+                                  'Chưa có ảnh',
+                                  textAlign: TextAlign.center,
+                                  style: tt.titleMedium,
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  'Thêm ảnh để khách thấy xe trên danh sách và chi tiết',
+                                  textAlign: TextAlign.center,
+                                  style: tt.bodySmall?.copyWith(color: cs.outline),
+                                ),
+                              ],
+                            )
+                          : GridView.builder(
+                              controller: widget.scrollController,
+                              gridDelegate:
+                                  const SliverGridDelegateWithFixedCrossAxisCount(
+                                crossAxisCount: 2,
+                                mainAxisSpacing: 12,
+                                crossAxisSpacing: 12,
+                                childAspectRatio: 0.85,
+                              ),
+                              itemCount: images.length,
+                              itemBuilder: (context, index) {
+                                final image = images[index];
+                                final url = image['imageUrl']?.toString() ?? '';
+                                final isPrimary = image['isPrimary'] == true;
+                                return Container(
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(
+                                      AppTheme.radiusInput,
+                                    ),
+                                    border: Border.all(
+                                      color: isPrimary
+                                          ? cs.primary
+                                          : cs.outlineVariant.withValues(
+                                              alpha: 0.4,
+                                            ),
+                                      width: isPrimary ? 2 : 1,
+                                    ),
+                                  ),
+                                  clipBehavior: Clip.antiAlias,
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.stretch,
+                                    children: [
+                                      Expanded(
+                                        child: url.isEmpty
+                                            ? ColoredBox(
+                                                color: cs.surfaceContainerLow,
+                                                child: Icon(
+                                                  Icons.broken_image_outlined,
+                                                  color: cs.outline,
+                                                ),
+                                              )
+                                            : Image.network(
+                                                url,
+                                                fit: BoxFit.cover,
+                                                errorBuilder: (_, _, _) =>
+                                                    ColoredBox(
+                                                  color: cs.surfaceContainerLow,
+                                                  child: Icon(
+                                                    Icons.broken_image_outlined,
+                                                    color: cs.outline,
+                                                  ),
+                                                ),
+                                              ),
+                                      ),
+                                      Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 4,
+                                          vertical: 2,
+                                        ),
+                                        child: Row(
+                                          children: [
+                                            if (isPrimary)
+                                              Expanded(
+                                                child: Text(
+                                                  'Đại diện',
+                                                  style: tt.labelSmall?.copyWith(
+                                                    color: cs.primary,
+                                                    fontWeight: FontWeight.w700,
+                                                  ),
+                                                ),
+                                              )
+                                            else
+                                              Expanded(
+                                                child: TextButton(
+                                                  onPressed: () =>
+                                                      _setPrimary(image),
+                                                  style: TextButton.styleFrom(
+                                                    padding: EdgeInsets.zero,
+                                                    visualDensity:
+                                                        VisualDensity.compact,
+                                                  ),
+                                                  child: const Text(
+                                                    'Đặt đại diện',
+                                                    style: TextStyle(fontSize: 12),
+                                                  ),
+                                                ),
+                                              ),
+                                            IconButton(
+                                              tooltip: 'Xóa ảnh',
+                                              visualDensity:
+                                                  VisualDensity.compact,
+                                              icon: Icon(
+                                                Icons.delete_outline_rounded,
+                                                size: 18,
+                                                color: cs.error,
+                                              ),
+                                              onPressed: () =>
+                                                  _deleteImage(image),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              },
+                            ),
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                    FilledButton.icon(
+                      onPressed: (!canUpload || _uploading)
+                          ? null
+                          : _pickAndUpload,
+                      icon: _uploading
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.cloud_upload_outlined),
+                      label: Text(
+                        canUpload
+                            ? (_uploading
+                                ? 'Đang tải lên Cloudinary...'
+                                : 'Thêm ảnh từ thư viện')
+                            : 'Đã đủ $_maxImages ảnh',
+                      ),
+                    ),
+                  ],
                 );
               },
             ),

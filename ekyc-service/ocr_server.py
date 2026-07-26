@@ -3,16 +3,30 @@ Lightweight OCR-only eKYC server (no DeepFace).
 Run:  python ocr_server.py
 Port: 8001
 """
-import io
+import logging
+from contextlib import asynccontextmanager
+
 import numpy as np
 import cv2
-from fastapi import FastAPI, File, UploadFile, HTTPException
+from fastapi import FastAPI, File, Form, UploadFile, HTTPException
 from fastapi.responses import JSONResponse
 import uvicorn
 
-from ocr_service import ocr_image
+from ocr_service import ocr_image, warmup
+from face_lite import face_match, liveness_check
 
-app = FastAPI(title="GoRento OCR", version="1.0.0")
+logger = logging.getLogger("ocr_server")
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    logger.info("Warming up EasyOCR models…")
+    warmup()
+    logger.info("EasyOCR ready")
+    yield
+
+
+app = FastAPI(title="GoRento OCR", version="1.1.0", lifespan=lifespan)
 
 
 def _read_image(file_bytes: bytes) -> np.ndarray:
@@ -25,15 +39,28 @@ def _read_image(file_bytes: bytes) -> np.ndarray:
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "mode": "ocr-only"}
+    return {"status": "ok", "mode": "ocr-only", "face_engine": "opencv-lite"}
 
 
 @app.post("/ocr")
-async def ocr_endpoint(file: UploadFile = File(...)):
-    data = await file.read()
-    img = _read_image(data)
-    result = ocr_image(img)
-    return JSONResponse(content=result)
+async def ocr_endpoint(
+    file: UploadFile = File(...),
+    doc_type: str | None = Form(None),
+):
+    """doc_type: cccd | cccd_back | license | license_back — theo đúng bước upload của app."""
+    try:
+        data = await file.read()
+        img = _read_image(data)
+        result = ocr_image(img, expected_type=doc_type)
+        return JSONResponse(content=result)
+    except HTTPException:
+        raise
+    except Exception as e:
+        return JSONResponse(content={
+            "code": 422,
+            "data": {},
+            "message": f"Không xử lý được ảnh — vui lòng thử lại ({type(e).__name__})",
+        })
 
 
 @app.post("/spoof-check")
@@ -49,20 +76,10 @@ async def spoof_check_endpoint(file: UploadFile = File(...)):
 
 @app.post("/liveness")
 async def liveness_endpoint(file: UploadFile = File(...)):
-    """OCR-only: chỉ kiểm tra có khuôn mặt trong ảnh (OpenCV), không soft-pass ảnh trống."""
+    """Liveness thật (OpenCV): mắt / độ nét / kích thước mặt / texture — điểm thay đổi theo ảnh."""
     data = await file.read()
     img = _read_image(data)
-    faces = _detect_faces(img)
-    ok = len(faces) >= 1
-    return JSONResponse(content={
-        "code": 200,
-        "data": {
-            "is_live": ok,
-            "liveness_score": 0.75 if ok else 0.1,
-            "face_count": len(faces),
-        },
-        "message": "ok" if ok else "Không thấy khuôn mặt trong selfie",
-    })
+    return JSONResponse(content=liveness_check(img))
 
 
 @app.post("/face-match")
@@ -70,37 +87,12 @@ async def face_match_endpoint(
     face: UploadFile = File(...),
     id_image: UploadFile = File(...),
 ):
-    """OCR-only: bắt buộc cả selfie và ảnh giấy tờ có khuôn mặt (OpenCV).
-
-    Không phải DeepFace — chỉ chặn ảnh không có mặt. So khớp thật: chạy main.py.
-    """
+    """So khớp selfie vs ảnh CCCD thật (OpenCV lite) — không còn hardcode 72%."""
     face_bytes = await face.read()
     id_bytes = await id_image.read()
     face_np = _read_image(face_bytes)
     id_np = _read_image(id_bytes)
-    face_n = len(_detect_faces(face_np))
-    id_n = len(_detect_faces(id_np))
-    if face_n < 1 or id_n < 1:
-        return JSONResponse(content={
-            "code": 200,
-            "data": {"similarity": 0.0, "score": 0.0, "verified": False},
-            "message": "Không thấy khuôn mặt trên selfie hoặc ảnh giấy tờ",
-        })
-    # Có mặt ở cả 2 ảnh → cho qua ngưỡng (0.65). Muốn so khớp danh tính thật dùng main.py.
-    return JSONResponse(content={
-        "code": 200,
-        "data": {"similarity": 0.72, "score": 0.72, "verified": True},
-        "message": "face detect ok (ocr-only — chưa so DeepFace)",
-    })
-
-
-def _detect_faces(img: np.ndarray) -> list:
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    cascade = cv2.CascadeClassifier(
-        cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
-    )
-    faces = cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=4, minSize=(60, 60))
-    return list(faces)
+    return JSONResponse(content=face_match(face_np, id_np))
 
 
 if __name__ == "__main__":

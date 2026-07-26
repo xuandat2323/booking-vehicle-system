@@ -85,7 +85,7 @@ public class VerificationController {
         Map<String, Object> spoofResult = ekycService.spoofCheck(image);
         boolean isSpoofed = extractSpoofed(spoofResult);
 
-        Map<String, Object> ocrResult = ekycService.ocrIdCard(image);
+        Map<String, Object> ocrResult = ekycService.ocrDocument(image, "cccd");
         boolean ocrOk = isOcrOk(ocrResult);
         String ocrMsg = messageOf(ocrResult, "Không nhận dạng được CCCD — vui lòng chụp lại rõ hơn");
 
@@ -96,11 +96,9 @@ public class VerificationController {
 
         String id = null;
         String name = null;
-        String docType = null;
         if (ocrOk && ocrResult.get("data") instanceof Map<?,?> d) {
             id = str(d, "id");
             name = str(d, "name");
-            docType = str(d, "doc_type");
             v.setCccdNumber(id);
             v.setFullName(name);
             v.setBirthDay(str(d, "birth_day"));
@@ -109,12 +107,9 @@ public class VerificationController {
             v.setExpiry(str(d, "expiry"));
         }
 
-        // Mặt trước CCCD: bắt buộc đọc được số 12 số, và không phải ảnh GPLX.
-        boolean looksLikeLicense = "license".equalsIgnoreCase(docType);
-        boolean verified = ocrOk && !looksLikeLicense && isCccdNumber(id);
-        if (looksLikeLicense) {
-            ocrMsg = "Ảnh giống bằng lái xe — vui lòng upload mặt trước CCCD";
-        } else if (ocrOk && !isCccdNumber(id)) {
+        // Chỉ validate CCCD — không áp tiêu chí bằng lái.
+        boolean verified = ocrOk && isCccdNumber(id);
+        if (ocrOk && !isCccdNumber(id)) {
             ocrMsg = "Không đọc được số CCCD 12 số — chụp rõ phần số căn cước";
         }
         v.setCccdVerified(verified);
@@ -145,27 +140,20 @@ public class VerificationController {
         Map<String, Object> spoofResult = ekycService.spoofCheck(image);
         boolean isSpoofed = extractSpoofed(spoofResult);
 
-        Map<String, Object> ocrResult = ekycService.ocrIdCard(image);
+        Map<String, Object> ocrResult = ekycService.ocrDocument(image, "cccd_back");
         boolean ocrOk = isOcrOk(ocrResult);
         String ocrMsg = messageOf(ocrResult, "Không nhận dạng được mặt sau CCCD");
 
         String backNumber = null;
-        String docType = null;
         if (ocrOk && ocrResult.get("data") instanceof Map<?,?> d) {
             backNumber = str(d, "id");
             if (backNumber == null) backNumber = str(d, "barcode");
-            docType = str(d, "doc_type");
         }
 
         UserVerification v = verificationRepository.findByUserUserId(user.getUserId())
                 .orElseGet(() -> { UserVerification nv = new UserVerification(); nv.setUser(user); return nv; });
 
-        // Mặt sau: OCR phải đọc được giấy tờ (code 200), không chấp nhận ảnh trống/random.
-        boolean verified = ocrOk && !"license".equalsIgnoreCase(docType);
-        if ("license".equalsIgnoreCase(docType)) {
-            ocrMsg = "Ảnh giống bằng lái — vui lòng upload mặt sau CCCD";
-            verified = false;
-        }
+        boolean verified = ocrOk;
         v.setCccdBackSpoofed(isSpoofed);
         v.setCccdBackVerified(verified);
         if (backNumber != null) {
@@ -198,7 +186,7 @@ public class VerificationController {
         Map<String, Object> spoofResult = ekycService.spoofCheck(image);
         boolean isSpoofed = extractSpoofed(spoofResult);
 
-        Map<String, Object> ocrResult = ekycService.ocrIdCard(image);
+        Map<String, Object> ocrResult = ekycService.ocrDocument(image, "license");
         boolean ocrOk = isOcrOk(ocrResult);
         String ocrMsg = messageOf(ocrResult, "Không nhận dạng được bằng lái — vui lòng chụp lại rõ hơn");
 
@@ -210,26 +198,21 @@ public class VerificationController {
         String licId = null;
         String licName = null;
         String licClass = null;
-        String docType = null;
         if (ocrOk && ocrResult.get("data") instanceof Map<?,?> d) {
             licId = str(d, "id");
             licName = str(d, "name");
             licClass = str(d, "type");
-            docType = str(d, "doc_type");
             v.setLicenseNumber(licId);
             v.setLicenseName(licName);
             v.setLicenseExpiry(str(d, "expiry"));
             v.setLicenseClass(licClass);
         }
 
-        boolean looksLikeCccd = "cccd".equalsIgnoreCase(docType) && (licClass == null || licClass.isBlank());
+        // Chỉ validate bằng lái — không đòi “số CCCD 12 số”.
         boolean hasClass = licClass != null && !licClass.isBlank();
-        boolean hasIdOrName = isCccdNumber(licId) || (licName != null && licName.length() >= 3);
-        boolean verified = ocrOk && !looksLikeCccd && (hasClass || hasIdOrName);
-        if (looksLikeCccd) {
-            ocrMsg = "Ảnh giống CCCD — vui lòng upload mặt trước bằng lái xe";
-            verified = false;
-        } else if (ocrOk && !verified) {
+        boolean hasIdOrName = (licId != null && !licId.isBlank()) || (licName != null && licName.length() >= 3);
+        boolean verified = ocrOk && (hasClass || hasIdOrName);
+        if (ocrOk && !verified) {
             ocrMsg = "Không đọc được hạng bằng / số GPLX — chụp rõ phần hạng (A1, B1, B2…)";
         }
         v.setLicenseVerified(verified);
@@ -266,8 +249,7 @@ public class VerificationController {
         Map<String, Object> spoofResult = ekycService.spoofCheck(image);
         boolean isSpoofed = extractSpoofed(spoofResult);
 
-        // Mặt sau bằng: vẫn OCR để từ chối ảnh trống / không có chữ.
-        Map<String, Object> ocrResult = ekycService.ocrIdCard(image);
+        Map<String, Object> ocrResult = ekycService.ocrDocument(image, "license_back");
         boolean ocrOk = isOcrOk(ocrResult);
         String ocrMsg = messageOf(ocrResult, "Không nhận dạng được mặt sau bằng lái");
 
@@ -373,13 +355,24 @@ public class VerificationController {
     }
 
     private boolean isOcrOk(Map<String, Object> ocrResult) {
-        return Integer.valueOf(200).equals(ocrResult.get("code"));
+        Object code = ocrResult.get("code");
+        if (code instanceof Number num) {
+            return num.intValue() == 200;
+        }
+        return "200".equals(String.valueOf(code));
     }
 
     private String messageOf(Map<String, Object> result, String fallback) {
         Object msg = result.get("message");
         if (msg != null && !msg.toString().isBlank() && !"ok".equalsIgnoreCase(msg.toString())) {
-            return msg.toString();
+            String text = msg.toString();
+            // RestTemplate thường nhét "500 Internal Server Error: ..." khi OCR service sập.
+            String lower = text.toLowerCase();
+            if (lower.contains("500") || lower.contains("connection refused")
+                    || lower.contains("not enough memory") || lower.contains("i/o error")) {
+                return "Dịch vụ nhận dạng giấy tờ đang quá tải hoặc ảnh quá lớn — thử chụp gần hơn rồi upload lại";
+            }
+            return text;
         }
         return fallback;
     }
