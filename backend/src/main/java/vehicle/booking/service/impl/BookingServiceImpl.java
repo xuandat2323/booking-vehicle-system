@@ -19,12 +19,14 @@ import vehicle.booking.service.InvoiceService;
 import vehicle.booking.service.NotificationService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -52,6 +54,9 @@ public class BookingServiceImpl implements BookingService {
     private final InvoiceService invoiceService;
     private final NotificationService notificationService;
 
+    @Value("${booking.expiration.pending-payment-timeout:15m}")
+    private Duration pendingPaymentTimeout;
+
     /**
      * Tạo đơn đặt xe mới.
      * Quy trình: Kiểm tra ngày hợp lệ -> Check xe có bị trùng lịch không -> Tính giá -> Lưu đơn -> Tạo hóa đơn (Invoice).
@@ -68,6 +73,9 @@ public class BookingServiceImpl implements BookingService {
         Car car = carRepository.findById(request.carId())
                 .orElseThrow(() -> new AppException(ErrorCode.CAR_NOT_FOUND, request.carId()));
 
+        // Hủy đơn PENDING quá hạn cọc trước khi kiểm tra trùng lịch (không chờ scheduler)
+        expirePendingUnpaidBookings(LocalDateTime.now().minus(pendingPaymentTimeout));
+
         List<Booking> overlapping = bookingRepository.findOverlappingBookings(
                 car.getCarId(),
                 request.startDate(),
@@ -76,6 +84,15 @@ public class BookingServiceImpl implements BookingService {
 
         if (!overlapping.isEmpty()) {
             Booking conflict = overlapping.get(0);
+            boolean ownPending = conflict.getStatus() == BookingStatus.PENDING
+                    && conflict.getUser().getUserId().equals(user.getUserId());
+            if (ownPending) {
+                throw new AppException(
+                        ErrorCode.BOOKING_OWN_PENDING_EXISTS,
+                        conflict.getStartDate(),
+                        conflict.getEndDate()
+                );
+            }
             throw new AppException(ErrorCode.BOOKING_DATE_CONFLICT, conflict.getStartDate(), conflict.getEndDate());
         }
 
@@ -325,9 +342,7 @@ public class BookingServiceImpl implements BookingService {
 
             boolean isEligible = booking.getStatus() == BookingStatus.PENDING
                     && invoice != null
-                    && invoice.getStatus() == InvoiceStatus.UNPAID
-                    && car != null
-                    && car.getStatus() == CarStatus.PENDING;
+                    && invoice.getStatus() == InvoiceStatus.UNPAID;
 
             if (!isEligible) {
                 continue;
@@ -335,7 +350,9 @@ public class BookingServiceImpl implements BookingService {
 
             booking.setStatus(BookingStatus.CANCELLED);
             invoice.setStatus(InvoiceStatus.FAILED);
-            car.setStatus(CarStatus.AVAILABLE);
+            if (car != null) {
+                car.setStatus(CarStatus.AVAILABLE);
+            }
 
             expiredBookingIds.add(booking.getBookingId());
 

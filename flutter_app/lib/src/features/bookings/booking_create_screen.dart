@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/network/dio_provider.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/utils/toast_utils.dart';
 import '../booking/branch_location_picker.dart';
 import '../booking/location_picker_dialog.dart';
 import '../cars/car_list_screen.dart';
@@ -135,7 +136,7 @@ class _BookingCreateScreenState extends ConsumerState<BookingCreateScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Không thể tạo đơn thuê: $e')));
+        ToastUtils.showError(context, e);
       }
     } finally {
       if (mounted) setState(() => _loading = false);

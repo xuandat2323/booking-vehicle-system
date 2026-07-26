@@ -18,10 +18,14 @@ import java.util.List;
 @Repository
 public interface BookingRepository extends JpaRepository<Booking, Long> {
 
+    /**
+     * Chỉ các trạng thái còn giữ lịch mới chặn đặt mới.
+     * CANCELLED / RETURNED / COMPLETED không chặn; PENDING quá hạn được hủy trước khi gọi query này.
+     */
     @Query("""
     SELECT b FROM Booking b
     WHERE b.car.carId = :carId
-      AND b.status IN ('PENDING', 'DEPOSIT_PAID', 'CONFIRMED', 'RENTING', 'RETURNED', 'COMPLETED')
+      AND b.status IN ('PENDING', 'DEPOSIT_PAID', 'CONFIRMED', 'RENTING')
       AND b.startDate <= :endDate
       AND b.endDate >= :startDate
     """)

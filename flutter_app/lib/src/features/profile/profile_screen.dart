@@ -122,15 +122,17 @@ class ProfileScreen extends ConsumerWidget {
                                 children: [
                                   SectionHeader(
                                     title: 'Thông tin cá nhân',
-                                    actionLabel: 'Chỉnh sửa',
-                                    onAction: () => _editProfile(
-                                      context,
-                                      ref,
-                                      name: name.toString(),
-                                      email: email.toString(),
-                                      license: license.toString(),
-                                      showLicense: !isAdmin,
-                                    ),
+                                    actionLabel: isAdmin ? null : 'Chỉnh sửa',
+                                    onAction: isAdmin
+                                        ? null
+                                        : () => _editProfile(
+                                              context,
+                                              ref,
+                                              name: name.toString(),
+                                              email: email.toString(),
+                                              license: license.toString(),
+                                              showLicense: true,
+                                            ),
                                   ),
                                   _buildInfoRow(context, Icons.phone_iphone_rounded, 'Số điện thoại', phone),
                                   const SizedBox(height: AppSpacing.lg),

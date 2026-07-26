@@ -173,6 +173,11 @@ public enum ErrorCode {
             "Xe đã được đặt từ %s đến %s. Vui lòng chọn khoảng thời gian khác.",
             HttpStatus.CONFLICT
     ),
+    BOOKING_OWN_PENDING_EXISTS(
+            "BOOKING_OWN_PENDING_EXISTS",
+            "Bạn đã có đơn thuê chưa thanh toán cho xe này (%s → %s). Vui lòng hoàn tất đặt cọc hoặc hủy đơn trong mục Chuyến đi.",
+            HttpStatus.CONFLICT
+    ),
     BOOKING_INVALID_DATE_RANGE(
             "BOOKING_INVALID_DATE_RANGE",
             "Ngày bắt đầu phải trước hoặc bằng ngày kết thúc.",
