@@ -2,30 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../core/network/dio_provider.dart';
 import '../../core/theme/app_theme.dart';
-
-final adminBookingsProvider =
-    FutureProvider.autoDispose.family<List<Map<String, dynamic>>, String>(
-        (ref, statusFilter) async {
-  final dio = ref.read(dioProvider);
-  final response = await dio.get(
-    '/api/admin/bookings',
-    queryParameters: {'page': 0, 'size': 50},
-  );
-  final data = response.data['data'] as Map<String, dynamic>;
-  final all =
-      (data['content'] as List<dynamic>).cast<Map<String, dynamic>>();
-  if (statusFilter.isEmpty) return all;
-  // Map legacy IN_PROGRESS → RENTING for filter chips
-  final wanted = statusFilter == 'IN_PROGRESS' ? 'RENTING' : statusFilter;
-  return all.where((b) {
-    final s = b['status']?.toString() ?? '';
-    if (wanted == 'RENTING') return s == 'RENTING' || s == 'IN_PROGRESS';
-    return s == wanted;
-  }).toList();
-});
-
+import 'admin_booking_actions.dart';
+import 'admin_bookings_provider.dart';
 class AdminBookingsScreen extends ConsumerStatefulWidget {
   const AdminBookingsScreen({super.key});
 
@@ -57,7 +36,6 @@ class _AdminBookingsScreenState extends ConsumerState<AdminBookingsScreen> {
       appBar: AppBar(title: const Text('Quản lý đơn đặt xe')),
       body: Column(
         children: [
-          // ── Filter chips ──
           SizedBox(
             height: 52,
             child: ListView.separated(
@@ -95,8 +73,6 @@ class _AdminBookingsScreenState extends ConsumerState<AdminBookingsScreen> {
               },
             ),
           ),
-
-          // ── Booking list ──
           Expanded(
             child: RefreshIndicator(
               onRefresh: () async =>
@@ -127,11 +103,7 @@ class _AdminBookingsScreenState extends ConsumerState<AdminBookingsScreen> {
                         separatorBuilder: (_, _) =>
                             const SizedBox(height: 12),
                         itemBuilder: (context, i) {
-                          return _BookingCard(
-                            booking: bookings[i],
-                            onAction: (action) => _handleAction(
-                                context, bookings[i], action),
-                          );
+                          return _BookingCard(booking: bookings[i]);
                         },
                       ),
                 loading: () =>
@@ -174,146 +146,12 @@ class _AdminBookingsScreenState extends ConsumerState<AdminBookingsScreen> {
       _ => cs.primary,
     };
   }
-
-  Future<void> _handleAction(
-    BuildContext context,
-    Map<String, dynamic> booking,
-    String action,
-  ) async {
-    final bookingId = booking['bookingId'];
-    final carName = booking['carName']?.toString() ?? '';
-
-    if (action == 'cancel') {
-      await _handleCancel(context, bookingId, carName);
-      return;
-    }
-
-    final (title, endpoint, confirmMsg, successLabel) = switch (action) {
-      'confirm' => (
-          'Duyệt đơn cọc',
-          '/api/admin/bookings/$bookingId/confirm',
-          'Xác nhận đã nhận cọc và duyệt đơn giữ xe "$carName"?',
-          'duyệt cọc',
-        ),
-      'handover' => (
-          'Bàn giao xe',
-          '/api/admin/bookings/$bookingId/handover',
-          'Tiến hành bàn giao xe "$carName" cho khách hàng bắt đầu thuê?',
-          'bàn giao',
-        ),
-      'return' => (
-          'Nhận trả xe',
-          '/api/admin/bookings/$bookingId/return',
-          'Xác nhận khách hàng đã trả xe "$carName"?',
-          'nhận trả',
-        ),
-      'complete' => (
-          'Hoàn thành đơn',
-          '/api/admin/bookings/$bookingId/complete',
-          'Xác nhận hoàn tất đơn "$carName", thanh toán nốt và trả cọc?',
-          'hoàn thành',
-        ),
-      _ => ('', '', '', ''),
-    };
-
-    if (endpoint.isEmpty) return;
-
-    final confirmed = await showDialog<bool>(
-      context: context,
-      useRootNavigator: true,
-      builder: (dialogContext) => AlertDialog(
-        title: Text(title),
-        content: Text(confirmMsg),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('Huỷ'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: Text(title),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed != true || !context.mounted) return;
-    await _runAdminAction(context, endpoint, successLabel, carName);
-  }
-
-  Future<void> _handleCancel(
-    BuildContext context,
-    dynamic bookingId,
-    String carName,
-  ) async {
-    final result = await showDialog<({String reason, String handling})>(
-      context: context,
-      useRootNavigator: true,
-      builder: (dialogContext) => _CancelBookingDialog(carName: carName),
-    );
-    if (result == null || !context.mounted) return;
-
-    await _runAdminAction(
-      context,
-      '/api/admin/bookings/$bookingId/cancel',
-      'hủy',
-      carName,
-      body: {
-        'reason': result.reason,
-        'handling': result.handling,
-      },
-    );
-  }
-
-  Future<void> _runAdminAction(
-    BuildContext context,
-    String endpoint,
-    String successLabel,
-    String carName, {
-    Map<String, dynamic>? body,
-  }) async {
-    showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      useRootNavigator: true,
-      builder: (_) => const Center(child: CircularProgressIndicator()),
-    );
-
-    try {
-      await ref.read(dioProvider).put(endpoint, data: body);
-      if (context.mounted) {
-        Navigator.of(context, rootNavigator: true).pop(); // loading
-      }
-      ref.invalidate(adminBookingsProvider(_selectedStatus));
-      ref.invalidate(adminBookingsProvider(''));
-      if (_selectedStatus != 'DEPOSIT_PAID') {
-        ref.invalidate(adminBookingsProvider('DEPOSIT_PAID'));
-      }
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Đã $successLabel đơn "$carName"')),
-        );
-      }
-    } catch (e) {
-      if (context.mounted) {
-        Navigator.of(context, rootNavigator: true).pop(); // loading
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Lỗi: $e')));
-      }
-    }
-  }
 }
 
-class _BookingCard extends StatefulWidget {
-  const _BookingCard({required this.booking, required this.onAction});
+class _BookingCard extends StatelessWidget {
+  const _BookingCard({required this.booking});
   final Map<String, dynamic> booking;
-  final void Function(String action) onAction;
 
-  @override
-  State<_BookingCard> createState() => _BookingCardState();
-}
-
-class _BookingCardState extends State<_BookingCard> {
   String _formatPrice(dynamic value) {
     if (value == null) return '0 đ';
     final n = (value is num)
@@ -342,17 +180,11 @@ class _BookingCardState extends State<_BookingCard> {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
-    final b = widget.booking;
+    final b = booking;
 
     final status = b['status']?.toString() ?? '';
     final (statusLabel, statusColor) = _statusInfo(status);
-
-    final showConfirm = status == 'DEPOSIT_PAID';
-    final showCancel = status == 'PENDING' || status == 'DEPOSIT_PAID' || status == 'CONFIRMED';
-    final showHandover = status == 'CONFIRMED';
-    final showReturn = status == 'RENTING' || status == 'IN_PROGRESS';
-    final showComplete = status == 'RETURNED';
-    final hasActions = showConfirm || showCancel || showHandover || showReturn || showComplete;
+    final carName = b['carName']?.toString() ?? '';
 
     return Container(
       decoration: BoxDecoration(
@@ -379,181 +211,142 @@ class _BookingCardState extends State<_BookingCard> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-            // ── Header row ──
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Tooltip(
-                        message: b['carName']?.toString() ?? '',
-                        child: Text(
-                          b['carName']?.toString() ?? '',
-                          style: tt.titleSmall
-                              ?.copyWith(fontWeight: FontWeight.w700),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Row(
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Icon(Icons.person_outline_rounded,
-                              size: 13, color: cs.outline),
-                          const SizedBox(width: 4),
-                          Expanded(
+                          Tooltip(
+                            message: carName,
                             child: Text(
-                              b['userName']?.toString()
-                                  ?? b['renterName']?.toString()
-                                  ?? '',
-                              style:
-                                  tt.bodySmall?.copyWith(color: cs.outline),
+                              carName,
+                              style: tt.titleSmall
+                                  ?.copyWith(fontWeight: FontWeight.w700),
+                              maxLines: 2,
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
+                          const SizedBox(height: 2),
+                          Row(
+                            children: [
+                              Icon(Icons.person_outline_rounded,
+                                  size: 13, color: cs.outline),
+                              const SizedBox(width: 4),
+                              Expanded(
+                                child: Text(
+                                  b['userName']?.toString()
+                                      ?? b['renterName']?.toString()
+                                      ?? '',
+                                  style:
+                                      tt.bodySmall?.copyWith(color: cs.outline),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
                         ],
                       ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Flexible(child: _StatusChip(label: statusLabel, color: statusColor)),
-              ],
-            ),
-
-            const SizedBox(height: 10),
-            Divider(color: cs.outlineVariant.withValues(alpha: 0.3)),
-            const SizedBox(height: 8),
-
-            // ── Dates + price ──
-            Row(
-              children: [
-                Icon(Icons.calendar_today_rounded,
-                    size: 13, color: cs.outline),
-                const SizedBox(width: 5),
-                Expanded(
-                  child: Text(
-                    '${b['startDate'] ?? ''} → ${b['endDate'] ?? ''}',
-                    style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Flexible(
-                  child: Text(
-                    _formatPrice(b['totalPrice']),
-                    style: tt.titleSmall?.copyWith(
-                      color: cs.primary,
-                      fontWeight: FontWeight.w700,
                     ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    textAlign: TextAlign.end,
-                  ),
-                ),
-              ],
-            ),
-
-            if (status == 'CANCELLED' &&
-                ((b['cancelReason']?.toString().isNotEmpty ?? false) ||
-                    (b['cancelHandling']?.toString().isNotEmpty ?? false))) ...[
-              const SizedBox(height: 10),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.red.withValues(alpha: 0.06),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.red.withValues(alpha: 0.2)),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (b['cancelReason']?.toString().isNotEmpty ?? false)
-                      Text(
-                        'Lý do hủy: ${b['cancelReason']}',
-                        style: tt.bodySmall?.copyWith(color: Colors.red.shade800),
-                      ),
-                    if (b['cancelHandling']?.toString().isNotEmpty ?? false) ...[
-                      const SizedBox(height: 4),
-                      Text(
-                        'Hướng xử lý: ${b['cancelHandling']}',
-                        style: tt.bodySmall?.copyWith(color: Colors.red.shade800),
-                      ),
-                    ],
+                    const SizedBox(width: 8),
+                    Flexible(
+                        child: _StatusChip(
+                            label: statusLabel, color: statusColor)),
                   ],
                 ),
-              ),
-            ],
-
-            const SizedBox(height: 8),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.open_in_new_rounded, size: 14, color: cs.outline),
-                const SizedBox(width: 4),
-                Text(
-                  'Nhấn để xem chi tiết',
-                  style: tt.labelSmall?.copyWith(color: cs.outline),
+                const SizedBox(height: 10),
+                Divider(color: cs.outlineVariant.withValues(alpha: 0.3)),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Icon(Icons.calendar_today_rounded,
+                        size: 13, color: cs.outline),
+                    const SizedBox(width: 5),
+                    Expanded(
+                      child: Text(
+                        '${b['startDate'] ?? ''} → ${b['endDate'] ?? ''}',
+                        style: tt.bodySmall
+                            ?.copyWith(color: cs.onSurfaceVariant),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: Text(
+                        _formatPrice(b['totalPrice']),
+                        style: tt.titleSmall?.copyWith(
+                          color: cs.primary,
+                          fontWeight: FontWeight.w700,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        textAlign: TextAlign.end,
+                      ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
+                if (status == 'CANCELLED' &&
+                    ((b['cancelReason']?.toString().isNotEmpty ?? false) ||
+                        (b['cancelHandling']?.toString().isNotEmpty ??
+                            false))) ...[
+                  const SizedBox(height: 10),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.red.withValues(alpha: 0.06),
+                      borderRadius: BorderRadius.circular(12),
+                      border:
+                          Border.all(color: Colors.red.withValues(alpha: 0.2)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (b['cancelReason']?.toString().isNotEmpty ?? false)
+                          Text(
+                            'Lý do hủy: ${b['cancelReason']}',
+                            style: tt.bodySmall
+                                ?.copyWith(color: Colors.red.shade800),
+                          ),
+                        if (b['cancelHandling']?.toString().isNotEmpty ??
+                            false) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            'Hướng xử lý: ${b['cancelHandling']}',
+                            style: tt.bodySmall
+                                ?.copyWith(color: Colors.red.shade800),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 8),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.open_in_new_rounded,
+                        size: 14, color: cs.outline),
+                    const SizedBox(width: 4),
+                    Text(
+                      'Nhấn để xem chi tiết',
+                      style: tt.labelSmall?.copyWith(color: cs.outline),
+                    ),
+                  ],
+                ),
               ],
             ),
           ),
-
-            // ── Action buttons ──
-            if (hasActions) ...[
-              const SizedBox(height: 12),
-              Divider(color: cs.outlineVariant.withValues(alpha: 0.3)),
-              const SizedBox(height: 10),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  if (showConfirm)
-                    _ActionButton(
-                      label: 'Duyệt cọc',
-                      icon: Icons.check_circle_outline_rounded,
-                      color: Colors.blue,
-                      onPressed: () => widget.onAction('confirm'),
-                    ),
-                  if (showHandover)
-                    _ActionButton(
-                      label: 'Bàn giao',
-                      icon: Icons.vpn_key_rounded,
-                      color: Colors.indigo,
-                      onPressed: () => widget.onAction('handover'),
-                    ),
-                  if (showReturn)
-                    _ActionButton(
-                      label: 'Nhận trả',
-                      icon: Icons.keyboard_return_rounded,
-                      color: Colors.teal,
-                      onPressed: () => widget.onAction('return'),
-                    ),
-                  if (showComplete)
-                    _ActionButton(
-                      label: 'Hoàn thành',
-                      icon: Icons.task_alt_rounded,
-                      color: Colors.green,
-                      onPressed: () => widget.onAction('complete'),
-                    ),
-                  if (showCancel)
-                    _ActionButton(
-                      label: 'Hủy đơn',
-                      icon: Icons.cancel_outlined,
-                      color: Colors.red,
-                      onPressed: () => widget.onAction('cancel'),
-                    ),
-                ],
-              ),
-            ],
-          ],
-        ),
+          const SizedBox(height: 8),
+          AdminBookingActionsPanel(
+            bookingId: b['bookingId'],
+            status: status,
+            carName: carName,
+          ),
+        ],
+      ),
     );
   }
 }
@@ -580,133 +373,6 @@ class _StatusChip extends StatelessWidget {
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
       ),
-    );
-  }
-}
-
-class _ActionButton extends StatelessWidget {
-  const _ActionButton({
-    required this.label,
-    required this.icon,
-    required this.color,
-    required this.onPressed,
-  });
-
-  final String label;
-  final IconData icon;
-  final Color color;
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    return OutlinedButton.icon(
-      onPressed: onPressed,
-      icon: Icon(icon, size: 16),
-      label: Text(label),
-      style: OutlinedButton.styleFrom(
-        foregroundColor: color,
-        side: BorderSide(color: color.withValues(alpha: 0.5)),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-        textStyle: Theme.of(context)
-            .textTheme
-            .labelSmall
-            ?.copyWith(fontWeight: FontWeight.w600),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppTheme.radiusPill),
-        ),
-        minimumSize: Size.zero,
-        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-      ),
-    );
-  }
-}
-
-class _CancelBookingDialog extends StatefulWidget {
-  const _CancelBookingDialog({required this.carName});
-
-  final String carName;
-
-  @override
-  State<_CancelBookingDialog> createState() => _CancelBookingDialogState();
-}
-
-class _CancelBookingDialogState extends State<_CancelBookingDialog> {
-  final _formKey = GlobalKey<FormState>();
-  final _reasonCtrl = TextEditingController();
-  final _handlingCtrl = TextEditingController();
-
-  @override
-  void dispose() {
-    _reasonCtrl.dispose();
-    _handlingCtrl.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    return AlertDialog(
-      title: const Text('Hủy đơn thuê'),
-      content: SizedBox(
-        width: 420,
-        child: Form(
-          key: _formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Hủy đơn "${widget.carName}". Chỉ hủy trước khi bàn giao xe.',
-                style: Theme.of(context).textTheme.bodyMedium,
-              ),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _reasonCtrl,
-                maxLines: 2,
-                maxLength: 500,
-                decoration: const InputDecoration(
-                  labelText: 'Lý do hủy *',
-                  hintText: 'VD: Khách yêu cầu hủy, xe hỏng, trùng lịch...',
-                  border: OutlineInputBorder(),
-                ),
-                validator: (v) =>
-                    (v == null || v.trim().isEmpty) ? 'Nhập lý do hủy' : null,
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _handlingCtrl,
-                maxLines: 2,
-                maxLength: 500,
-                decoration: const InputDecoration(
-                  labelText: 'Hướng xử lý *',
-                  hintText: 'VD: Hoàn cọc 100%, giữ 30% phí hủy...',
-                  border: OutlineInputBorder(),
-                ),
-                validator: (v) => (v == null || v.trim().isEmpty)
-                    ? 'Nhập hướng xử lý'
-                    : null,
-              ),
-            ],
-          ),
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Đóng'),
-        ),
-        FilledButton(
-          style: FilledButton.styleFrom(backgroundColor: cs.error),
-          onPressed: () {
-            if (!_formKey.currentState!.validate()) return;
-            Navigator.of(context).pop((
-              reason: _reasonCtrl.text.trim(),
-              handling: _handlingCtrl.text.trim(),
-            ));
-          },
-          child: const Text('Xác nhận hủy'),
-        ),
-      ],
     );
   }
 }

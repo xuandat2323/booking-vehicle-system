@@ -5,7 +5,8 @@ import 'package:go_router/go_router.dart';
 import '../../core/network/dio_provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/toast_utils.dart';
-import '../admin/admin_bookings_screen.dart';
+import '../admin/admin_booking_actions.dart';
+import '../admin/admin_bookings_provider.dart';
 import '../cars/car_list_screen.dart';
 import '../invoices/invoice_list_screen.dart';
 import 'booking_history_screen.dart';
@@ -188,7 +189,7 @@ class BookingDetailScreen extends ConsumerWidget {
         'DEPOSIT_PAID' => (
             Icons.hourglass_top_rounded,
             Colors.orange,
-            'Khách đã đặt cọc. Hãy duyệt đơn trên danh sách quản lý.',
+            'Khách đã đặt cọc. Hãy duyệt đơn bên dưới.',
           ),
         'CONFIRMED' => (
             Icons.check_circle_outline_rounded,
@@ -203,7 +204,7 @@ class BookingDetailScreen extends ConsumerWidget {
         'RETURNED' => (
             Icons.pending_actions_rounded,
             Colors.teal,
-            'Khách đã trả xe. Hãy kiểm tra và hoàn tất đơn.',
+            'Khách đã trả xe. Hãy kiểm tra và hoàn tất đơn bên dưới.',
           ),
         'COMPLETED' => (
             Icons.task_alt_rounded,
@@ -468,15 +469,17 @@ class BookingDetailScreen extends ConsumerWidget {
                   const SizedBox(height: 24),
                 ],
 
-                // Admin: quay lại danh sách để thao tác duyệt/hủy/...
+                // Admin actions theo trạng thái (giống danh sách)
                 if (isAdmin) ...[
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton.icon(
-                      onPressed: () => context.go('/admin/bookings'),
-                      icon: const Icon(Icons.manage_search_rounded),
-                      label: const Text('Mở danh sách để xử lý đơn'),
+                  AdminBookingActionsPanel(
+                    bookingId: bookingId,
+                    status: status,
+                    carName: carDisplayTitle(
+                      booking['carBrand']?.toString(),
+                      booking['carName']?.toString(),
                     ),
+                    fullWidth: true,
+                    onDone: () => _refreshLists(ref),
                   ),
                 ],
 

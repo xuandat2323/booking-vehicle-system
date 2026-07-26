@@ -136,13 +136,18 @@ class NotificationScreen extends ConsumerWidget {
                 final referenceId = notif['referenceId'];
 
                 return InkWell(
-                  onTap: () {
-                    _markRead(ref, notif['id'] as int);
+                  onTap: () async {
+                    final id = notif['id'];
+                    if (id is int) {
+                      await _markRead(ref, id);
+                    }
+                    if (!context.mounted) return;
                     if (referenceId != null && (type?.startsWith('BOOKING') ?? false)) {
+                      final bookingId = referenceId.toString();
                       if (isAdmin) {
-                        context.push('/admin/bookings/$referenceId');
+                        context.push('/admin/bookings/$bookingId');
                       } else {
-                        context.push('/bookings/$referenceId');
+                        context.push('/bookings/$bookingId');
                       }
                     }
                   },

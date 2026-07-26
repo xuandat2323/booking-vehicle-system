@@ -5,7 +5,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../features/admin/admin_bookings_screen.dart';
+import '../../features/admin/admin_bookings_provider.dart';
 import '../../features/admin/admin_dashboard_screen.dart';
 import '../../features/bookings/booking_detail_screen.dart';
 import '../../features/bookings/booking_history_screen.dart';
