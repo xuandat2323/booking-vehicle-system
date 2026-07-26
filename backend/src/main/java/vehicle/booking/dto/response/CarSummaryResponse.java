@@ -19,6 +19,8 @@ public record CarSummaryResponse(
         java.math.BigDecimal latitude,
         java.math.BigDecimal longitude,
         Double averageRating,
-        Long reviewCount
+        Long reviewCount,
+        /** Chỉ có giá trị khi tìm xe quanh một toạ độ (API /api/cars/nearby). */
+        Double distanceKm
 ) {
 }

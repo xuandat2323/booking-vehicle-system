@@ -16,6 +16,7 @@ import '../../features/branches/branch_list_screen.dart';
 import '../../features/cars/car_detail_screen.dart';
 import '../../features/cars/car_list_screen.dart';
 import '../../features/cars/car_tracking_screen.dart';
+import '../../features/cars/nearby_map_screen.dart';
 import '../../features/chatbot/chatbot_screen.dart';
 import '../../features/home/home_screen.dart';
 import '../../features/home/main_layout.dart';
@@ -103,6 +104,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
 
       // ── Full-screen routes (no bottom nav) ──
       GoRoute(path: '/change-password', builder: (context, state) => const ChangePasswordScreen()),
+      GoRoute(path: '/nearby-map', builder: (context, state) => const NearbyMapScreen()),
       GoRoute(
         path: '/cars/:id',
         builder: (context, state) => CarDetailScreen(carId: state.pathParameters['id']!),

@@ -33,6 +33,7 @@ import org.springframework.util.StringUtils;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -57,6 +58,11 @@ public class CarServiceImpl implements CarService {
     private static final int DEFAULT_SEATS = 5;
     private static final Transmission DEFAULT_TRANSMISSION = Transmission.AUTOMATIC;
     private static final FuelType DEFAULT_FUEL_TYPE = FuelType.GASOLINE;
+    private static final double DEFAULT_NEARBY_RADIUS_KM = 10.0;
+    private static final double MIN_NEARBY_RADIUS_KM = 1.0;
+    private static final double MAX_NEARBY_RADIUS_KM = 100.0;
+    private static final double KM_PER_DEGREE_LAT = 111.0;
+    private static final double EARTH_RADIUS_KM = 6371.0;
 
     private final CarRepository carRepository;
     private final BookingRepository bookingRepository;
@@ -84,7 +90,7 @@ public class CarServiceImpl implements CarService {
         car.setFuelType(Objects.requireNonNullElse(request.fuelType(), DEFAULT_FUEL_TYPE));
         car.setLocation(request.location());
         if (request.branchId() != null) {
-            car.setBranch(resolveBranch(request.branchId()));
+            applyBranchLocation(car, resolveBranch(request.branchId()), request.location());
         }
 
         Car saved = carRepository.save(car);
@@ -94,6 +100,27 @@ public class CarServiceImpl implements CarService {
     private Branch resolveBranch(Long branchId) {
         return branchRepository.findById(branchId)
                 .orElseThrow(() -> new AppException(ErrorCode.BRANCH_NOT_FOUND, branchId));
+    }
+
+    /**
+     * Xe thuộc chi nhánh thì lấy toạ độ chi nhánh làm điểm giao/nhận mặc định,
+     * nếu không app đặt xe sẽ không có sẵn điểm đón và khách phải tự chọn lại.
+     */
+    private void applyBranchLocation(Car car, Branch branch, String explicitLocation) {
+        car.setBranch(branch);
+
+        if (branch.getLatitude() != null && branch.getLongitude() != null) {
+            car.setLatitude(branch.getLatitude());
+            car.setLongitude(branch.getLongitude());
+            car.setLocationSource("BRANCH");
+            car.setLocationUpdatedAt(java.time.LocalDateTime.now());
+        }
+
+        boolean hasExplicit = explicitLocation != null && !explicitLocation.isBlank();
+        boolean hasCurrent = car.getLocation() != null && !car.getLocation().isBlank();
+        if (!hasExplicit && !hasCurrent) {
+            car.setLocation(branch.getAddress());
+        }
     }
 
     @Override
@@ -118,7 +145,9 @@ public class CarServiceImpl implements CarService {
         if (request.transmission() != null) car.setTransmission(request.transmission());
         if (request.fuelType() != null) car.setFuelType(request.fuelType());
         if (request.location() != null) car.setLocation(request.location());
-        if (request.branchId() != null) car.setBranch(resolveBranch(request.branchId()));
+        if (request.branchId() != null) {
+            applyBranchLocation(car, resolveBranch(request.branchId()), request.location());
+        }
 
         Car updated = carRepository.save(car);
         String primaryImageUrl = resolvePrimaryImageUrl(updated.getCarId());
@@ -264,6 +293,10 @@ public class CarServiceImpl implements CarService {
     }
 
     private CarSummaryResponse mapToSummary(Car car, String imageUrl) {
+        return mapToSummary(car, imageUrl, null);
+    }
+
+    private CarSummaryResponse mapToSummary(Car car, String imageUrl, Double distanceKm) {
         Double avgRating = reviewRepository.getAverageRatingByCarId(car.getCarId());
         Long reviewCount = reviewRepository.countByCarId(car.getCarId());
         
@@ -282,7 +315,8 @@ public class CarServiceImpl implements CarService {
                 car.getLatitude(),
                 car.getLongitude(),
                 avgRating != null ? avgRating : 0.0,
-                reviewCount != null ? reviewCount : 0L
+                reviewCount != null ? reviewCount : 0L,
+                distanceKm
         );
     }
 
@@ -317,19 +351,46 @@ public class CarServiceImpl implements CarService {
 
     @Override
     public List<CarSummaryResponse> getNearbyCars(Double lat, Double lng, Double radiusKm, boolean onlyAvailable, Long branchId) {
-        double delta = radiusKm / 111.0;
-        double lngDelta = radiusKm / (111.0 * Math.cos(Math.toRadians(lat)));
+        double radius = Math.min(Math.max(radiusKm != null ? radiusKm : DEFAULT_NEARBY_RADIUS_KM, MIN_NEARBY_RADIUS_KM), MAX_NEARBY_RADIUS_KM);
+
+        double delta = radius / KM_PER_DEGREE_LAT;
+        double lngDelta = radius / (KM_PER_DEGREE_LAT * Math.cos(Math.toRadians(lat)));
 
         BigDecimal minLat = BigDecimal.valueOf(lat - delta);
         BigDecimal maxLat = BigDecimal.valueOf(lat + delta);
         BigDecimal minLng = BigDecimal.valueOf(lng - lngDelta);
         BigDecimal maxLng = BigDecimal.valueOf(lng + lngDelta);
 
+        // Query lọc theo hình chữ nhật cho nhanh, sau đó lọc lại bằng khoảng cách thật
+        // để kết quả khớp với vòng tròn bán kính hiển thị trên bản đồ.
         List<Car> cars = carRepository.findNearby(minLat, maxLat, minLng, maxLng, onlyAvailable, branchId);
         Map<Long, String> imageUrls = resolvePrimaryImageUrls(cars);
+
+        record CarDistance(Car car, double distanceKm) {}
+
         return cars.stream()
-                .map(car -> mapToSummary(car, imageUrls.get(car.getCarId())))
+                .map(car -> new CarDistance(car, haversineKm(
+                        lat, lng,
+                        car.getLatitude().doubleValue(),
+                        car.getLongitude().doubleValue()
+                )))
+                .filter(item -> item.distanceKm() <= radius)
+                .sorted(Comparator.comparingDouble(CarDistance::distanceKm))
+                .map(item -> mapToSummary(
+                        item.car(),
+                        imageUrls.get(item.car().getCarId()),
+                        Math.round(item.distanceKm() * 10.0) / 10.0
+                ))
                 .toList();
+    }
+
+    private static double haversineKm(double lat1, double lng1, double lat2, double lng2) {
+        double dLat = Math.toRadians(lat2 - lat1);
+        double dLng = Math.toRadians(lng2 - lng1);
+        double a = Math.sin(dLat / 2) * Math.sin(dLat / 2)
+                + Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2))
+                * Math.sin(dLng / 2) * Math.sin(dLng / 2);
+        return 2 * EARTH_RADIUS_KM * Math.asin(Math.min(1.0, Math.sqrt(a)));
     }
 
     private String normalizeText(String value) {

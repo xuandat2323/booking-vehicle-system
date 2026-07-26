@@ -17,6 +17,11 @@ final carListParamsProvider = StateProvider<CarListParams>((ref) => const CarLis
 
 final nearbyLocationProvider = StateProvider<({double lat, double lng})?>((ref) => null);
 
+/// Các mức bán kính cho chế độ "Gần tôi" (km).
+const nearbyRadiusOptions = <double>[2, 5, 10, 20, 50];
+
+final nearbyRadiusProvider = StateProvider<double>((ref) => 10);
+
 final carListProvider = FutureProvider<List<Map<String, dynamic>>>((ref) async {
   final dio = ref.read(dioProvider);
   final params = ref.watch(carListParamsProvider);
@@ -26,7 +31,7 @@ final carListProvider = FutureProvider<List<Map<String, dynamic>>>((ref) async {
     final nearbyQuery = <String, dynamic>{
       'lat': nearbyLoc.lat,
       'lng': nearbyLoc.lng,
-      'radius': 10,
+      'radius': ref.watch(nearbyRadiusProvider),
       'onlyAvailable': params.onlyAvailable,
     };
     if (params.branchId != null) nearbyQuery['branchId'] = params.branchId;
@@ -231,6 +236,17 @@ class _CarListScreenState extends ConsumerState<CarListScreen> {
     }
   }
 
+  void _setNearbyRadius(double radiusKm) {
+    if (ref.read(nearbyRadiusProvider) == radiusKm) return;
+    ref.read(nearbyRadiusProvider.notifier).state = radiusKm;
+    ref.invalidate(carListProvider);
+  }
+
+  void _openNearbyMap() => context.push('/nearby-map');
+
+  static String _formatRadius(double value) =>
+      value == value.roundToDouble() ? value.toInt().toString() : value.toString();
+
   void _applyFilters() {
     _clearNearby();
     final brand = _sheetBrand == 'Tất cả' ? '' : _sheetBrand;
@@ -427,6 +443,7 @@ class _CarListScreenState extends ConsumerState<CarListScreen> {
     final branchesAsync = ref.watch(branchListProvider);
 
     final isNearbyMode = ref.watch(nearbyLocationProvider) != null;
+    final radiusKm = ref.watch(nearbyRadiusProvider);
     final hasActiveFilters = params.brand.isNotEmpty ||
         params.name.isNotEmpty ||
         params.location.isNotEmpty ||
@@ -563,15 +580,74 @@ class _CarListScreenState extends ConsumerState<CarListScreen> {
               ),
             ),
           if (isNearbyMode)
-            AppSurface(
-              color: cs.primaryContainer.withValues(alpha: 0.08),
-              padding: const EdgeInsets.symmetric(
-                horizontal: AppSpacing.page,
-                vertical: AppSpacing.sm,
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.page,
+                0,
+                AppSpacing.page,
+                AppSpacing.sm,
               ),
-              child: Text(
-                'Đang tìm xe trong bán kính 10 km',
-                style: tt.bodySmall?.copyWith(color: cs.primary, fontWeight: FontWeight.w600),
+              child: Material(
+                color: cs.primaryContainer.withValues(alpha: 0.18),
+                borderRadius: BorderRadius.circular(AppTheme.radiusCard),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.md,
+                    AppSpacing.sm,
+                    AppSpacing.sm,
+                    AppSpacing.sm,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(Icons.my_location_rounded, size: 18, color: cs.primary),
+                          const SizedBox(width: AppSpacing.sm),
+                          Expanded(
+                            child: Text(
+                              'Xe trong bán kính ${_formatRadius(radiusKm)} km',
+                              style: tt.bodySmall?.copyWith(
+                                color: cs.primary,
+                                fontWeight: FontWeight.w600,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          TextButton.icon(
+                            onPressed: _openNearbyMap,
+                            icon: const Icon(Icons.map_rounded, size: 16),
+                            label: const Text('Bản đồ'),
+                            style: TextButton.styleFrom(
+                              visualDensity: VisualDensity.compact,
+                              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
+                            ),
+                          ),
+                        ],
+                      ),
+                      SizedBox(
+                        height: 40,
+                        child: ListView(
+                          scrollDirection: Axis.horizontal,
+                          children: [
+                            for (final option in nearbyRadiusOptions)
+                              Padding(
+                                padding: const EdgeInsets.only(right: AppSpacing.sm),
+                                child: ChoiceChip(
+                                  label: Text('${_formatRadius(option)} km'),
+                                  selected: radiusKm == option,
+                                  showCheckmark: false,
+                                  visualDensity: VisualDensity.compact,
+                                  onSelected: (_) => _setNearbyRadius(option),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ),
             ),
           Expanded(
@@ -618,6 +694,7 @@ class _CarListScreenState extends ConsumerState<CarListScreen> {
                       final location = car['location']?.toString() ?? 'Chưa cập nhật';
                       final seats = car['seats']?.toString() ?? '-';
                       final priceText = FormatUtils.vndPerDay(car['pricePerDay']);
+                      final distanceKm = (car['distanceKm'] as num?)?.toDouble();
 
                       return FadeSlideIn(
                         delay: Duration(milliseconds: index * 40),
@@ -678,7 +755,15 @@ class _CarListScreenState extends ConsumerState<CarListScreen> {
                                       ),
                                     ),
                                     const SizedBox(height: AppSpacing.xs),
-                                    _TextChip(label: '$seats chỗ'),
+                                    Wrap(
+                                      spacing: AppSpacing.xs,
+                                      runSpacing: AppSpacing.xs,
+                                      children: [
+                                        _TextChip(label: '$seats chỗ'),
+                                        if (distanceKm != null)
+                                          _TextChip(label: 'Cách ${_formatRadius(distanceKm)} km'),
+                                      ],
+                                    ),
                                   ],
                                 ),
                               ),

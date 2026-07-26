@@ -43,11 +43,11 @@ class _BookingCreateScreenState extends ConsumerState<BookingCreateScreen> {
       final loc = car['location']?.toString() ?? '';
       final lat = (car['latitude'] as num?)?.toDouble();
       final lng = (car['longitude'] as num?)?.toDouble();
-      final branchName = car['branchName']?.toString();
-      if (lat != null && lng != null && loc.isNotEmpty) {
-        final address = branchName != null && branchName.isNotEmpty
+      final branchName = car['branchName']?.toString() ?? '';
+      if (lat != null && lng != null && (loc.isNotEmpty || branchName.isNotEmpty)) {
+        final address = branchName.isNotEmpty && loc.isNotEmpty
             ? '$branchName — $loc'
-            : loc;
+            : (branchName.isNotEmpty ? branchName : loc);
         setState(() {
           _pickupLocation = PickedLocation(address: address, lat: lat, lng: lng);
           _dropoffLocation = PickedLocation(address: address, lat: lat, lng: lng);
