@@ -6,17 +6,15 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import vehicle.booking.dto.response.NotificationResponse;
-import vehicle.booking.entity.Notification;
 import vehicle.booking.entity.User;
 import vehicle.booking.entity.enums.NotificationType;
 import vehicle.booking.exception.AppException;
 import vehicle.booking.exception.ErrorCode;
 import vehicle.booking.repository.NotificationRepository;
 import vehicle.booking.repository.UserRepository;
-import vehicle.booking.realtime.RealtimeEventHub;
-
-import java.util.List;
 
 @Slf4j
 @Service
@@ -25,46 +23,47 @@ public class NotificationService {
 
     private final NotificationRepository notificationRepository;
     private final UserRepository userRepository;
-    private final FcmService fcmService;
-    private final RealtimeEventHub realtimeEventHub;
+    private final NotificationDispatchService notificationDispatchService;
 
     /**
-     * Gửi thông báo — không ném exception ra ngoài để không làm hỏng nghiệp vụ chính
-     * (đặt cọc, hủy đơn, v.v.).
+     * Lên lịch gửi thông báo sau khi transaction commit — không chặn API booking.
+     * FCM/network chạy async; lỗi gửi không làm hỏng nghiệp vụ chính.
      */
     public void send(User user, String title, String message, NotificationType type, Long referenceId) {
-        if (user == null) {
+        if (user == null || user.getUserId() == null) {
             return;
         }
-        try {
-            Notification n = new Notification();
-            n.setUser(user);
-            n.setTitle(title);
-            n.setMessage(message);
-            n.setType(type != null ? type : NotificationType.SYSTEM);
-            n.setReferenceId(referenceId);
-            notificationRepository.saveAndFlush(n);
-
-            fcmService.send(user.getFcmToken(), title, message);
-            if (n.getNotificationId() != null && user.getUserId() != null) {
-                realtimeEventHub.publishNotificationCreated(user.getUserId(), n.getNotificationId());
-            }
-        } catch (Exception e) {
-            log.warn("Notification send failed userId={} type={}: {}",
-                    user.getUserId(), type, e.getMessage());
-        }
+        Long userId = user.getUserId();
+        NotificationType resolvedType = type != null ? type : NotificationType.SYSTEM;
+        runAfterCommit(() ->
+                notificationDispatchService.dispatch(userId, title, message, resolvedType, referenceId));
     }
 
     /** Gửi thông báo tới toàn bộ tài khoản ADMIN đang hoạt động. */
     public void sendToAdmins(String title, String message, NotificationType type, Long referenceId) {
-        try {
-            List<User> admins = userRepository.findByRoleIgnoreCase("ADMIN");
-            for (User admin : admins) {
-                send(admin, title, message, type, referenceId);
-            }
-        } catch (Exception e) {
-            log.warn("sendToAdmins failed type={}: {}", type, e.getMessage());
+        NotificationType resolvedType = type != null ? type : NotificationType.SYSTEM;
+        runAfterCommit(() ->
+                notificationDispatchService.dispatchToAdmins(title, message, resolvedType, referenceId));
+    }
+
+    /**
+     * Chạy sau commit để tránh gửi thông báo khi booking rollback;
+     * ngoài transaction thì chạy ngay (vẫn qua {@code @Async} dispatch).
+     */
+    private void runAfterCommit(Runnable action) {
+        if (TransactionSynchronizationManager.isActualTransactionActive()
+                && TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(
+                    new TransactionSynchronization() {
+                        @Override
+                        public void afterCommit() {
+                            action.run();
+                        }
+                    }
+            );
+            return;
         }
+        action.run();
     }
 
     public Page<NotificationResponse> getMyNotifications(String phone, Pageable pageable) {

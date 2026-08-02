@@ -210,27 +210,38 @@ Future<void> _runAdminAction({
     context: context,
     barrierDismissible: false,
     useRootNavigator: true,
-    builder: (_) => const Center(child: CircularProgressIndicator()),
+    builder: (_) => const PopScope(
+      canPop: false,
+      child: Center(child: CircularProgressIndicator()),
+    ),
   );
 
+  var succeeded = false;
+  Object? error;
   try {
     await ref.read(dioProvider).put(endpoint, data: body);
+    succeeded = true;
+  } catch (e) {
+    error = e;
+  } finally {
+    // Luôn đóng overlay loading (route vừa push ở trên).
     if (context.mounted) {
       Navigator.of(context, rootNavigator: true).pop();
     }
+  }
+
+  if (!context.mounted) return;
+
+  if (succeeded) {
+    // Invalidate không được chặn UI bằng full-screen loading (xem skipLoadingOnReload).
     ref.invalidate(adminBookingsProvider);
     onDone?.call();
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Đã $successLabel đơn "$carName"')),
-      );
-    }
-  } catch (e) {
-    if (context.mounted) {
-      Navigator.of(context, rootNavigator: true).pop();
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Lỗi: $e')));
-    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Đã $successLabel đơn "$carName"')),
+    );
+  } else {
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text('Lỗi: $error')));
   }
 }
 

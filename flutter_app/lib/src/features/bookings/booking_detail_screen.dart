@@ -618,6 +618,9 @@ class BookingDetailScreen extends ConsumerWidget {
             ),
           );
         },
+        // Invalidate/SSE không được xoá UI thành spinner full-screen.
+        skipLoadingOnReload: true,
+        skipLoadingOnRefresh: true,
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Không tải được chi tiết đơn thuê: $e')),
       ),

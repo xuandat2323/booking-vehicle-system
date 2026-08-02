@@ -88,6 +88,8 @@ class BookingHistoryScreen extends ConsumerWidget {
         ],
       ),
       body: bookingsAsync.when(
+        skipLoadingOnReload: true,
+        skipLoadingOnRefresh: true,
         data: (bookings) {
           if (bookings.isEmpty) {
             return Center(

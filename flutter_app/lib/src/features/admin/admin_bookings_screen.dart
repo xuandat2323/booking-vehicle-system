@@ -78,6 +78,9 @@ class _AdminBookingsScreenState extends ConsumerState<AdminBookingsScreen> {
               onRefresh: () async =>
                   ref.invalidate(adminBookingsProvider(_selectedStatus)),
               child: bookingsAsync.when(
+                // Sau action/SSE: giữ list cũ, không thay cả màn bằng spinner.
+                skipLoadingOnReload: true,
+                skipLoadingOnRefresh: true,
                 data: (bookings) => bookings.isEmpty
                     ? Center(
                         child: Column(

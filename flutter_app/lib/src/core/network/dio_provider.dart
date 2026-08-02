@@ -29,11 +29,16 @@ Map<String, String> _defaultHeaders() => {
       if (baseUrl.contains('ngrok')) 'ngrok-skip-browser-warning': 'true',
     };
 
+Duration get _dioTimeout => const Duration(seconds: 20);
+
 final rawDioProvider = Provider<Dio>((ref) {
   return Dio(BaseOptions(
     baseUrl: baseUrl,
     headers: _defaultHeaders(),
     contentType: Headers.jsonContentType,
+    connectTimeout: _dioTimeout,
+    receiveTimeout: _dioTimeout,
+    sendTimeout: _dioTimeout,
   ));
 });
 
@@ -44,6 +49,9 @@ final dioProvider = Provider<Dio>((ref) {
     baseUrl: baseUrl,
     headers: _defaultHeaders(),
     contentType: Headers.jsonContentType,
+    connectTimeout: _dioTimeout,
+    receiveTimeout: _dioTimeout,
+    sendTimeout: _dioTimeout,
   ));
 
   dio.interceptors.add(
