@@ -7,10 +7,13 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import vehicle.booking.entity.Notification;
+import vehicle.booking.entity.enums.NotificationType;
 
 public interface NotificationRepository extends JpaRepository<Notification, Long> {
 
     Page<Notification> findByUserUserIdOrderByCreatedAtDesc(Long userId, Pageable pageable);
+
+    boolean existsByTypeAndReferenceId(NotificationType type, Long referenceId);
 
     long countByUserUserIdAndIsReadFalse(Long userId);
 

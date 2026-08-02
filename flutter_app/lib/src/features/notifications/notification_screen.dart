@@ -31,6 +31,8 @@ IconData _notifIcon(String? type) {
       return Icons.directions_car_filled_rounded;
     case 'BOOKING_RETURNED':
       return Icons.keyboard_return_rounded;
+    case 'BOOKING_DUE_TODAY':
+      return Icons.event_available_rounded;
     case 'BOOKING_CANCELLED':
       return Icons.cancel;
     case 'BOOKING_COMPLETED':
@@ -56,6 +58,8 @@ Color _notifColor(String? type) {
       return const Color(0xFF6750A4);
     case 'BOOKING_RETURNED':
       return Colors.teal;
+    case 'BOOKING_DUE_TODAY':
+      return Colors.deepOrange;
     case 'BOOKING_CANCELLED':
       return Colors.red;
     case 'BOOKING_COMPLETED':

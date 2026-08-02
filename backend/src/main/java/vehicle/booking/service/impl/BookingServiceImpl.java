@@ -13,6 +13,7 @@ import vehicle.booking.repository.BookingRepository;
 import vehicle.booking.repository.BranchRepository;
 import vehicle.booking.repository.CarRepository;
 import vehicle.booking.repository.InvoiceRepository;
+import vehicle.booking.repository.NotificationRepository;
 import vehicle.booking.repository.UserRepository;
 import vehicle.booking.realtime.RealtimeEventHub;
 import vehicle.booking.entity.enums.NotificationType;
@@ -30,6 +31,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.Duration;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -55,6 +57,7 @@ public class BookingServiceImpl implements BookingService {
     private final BranchRepository branchRepository;
     private final InvoiceRepository invoiceRepository;
     private final UserRepository userRepository;
+    private final NotificationRepository notificationRepository;
     private final InvoiceService invoiceService;
     private final NotificationService notificationService;
     private final RealtimeEventHub realtimeEventHub;
@@ -470,6 +473,36 @@ public class BookingServiceImpl implements BookingService {
         }
 
         return expiredBookingIds;
+    }
+
+    @Override
+    @Transactional
+    public List<Long> notifyDueReturnBookings(LocalDate today) {
+        List<Booking> dueBookings = bookingRepository.findRentingBookingsDueOn(today);
+        if (dueBookings.isEmpty()) {
+            return List.of();
+        }
+
+        List<Long> notifiedIds = new ArrayList<>();
+        for (Booking booking : dueBookings) {
+            Long bookingId = booking.getBookingId();
+            if (notificationRepository.existsByTypeAndReferenceId(
+                    NotificationType.BOOKING_DUE_TODAY, bookingId)) {
+                continue;
+            }
+
+            String carLabel = booking.getCar() != null
+                    ? booking.getCar().getBrand() + " " + booking.getCar().getName()
+                    : "xe đã thuê";
+            notificationService.send(booking.getUser(),
+                    "Hôm nay đến hạn trả xe",
+                    "Đơn #" + bookingId + " (" + carLabel + ") kết thúc ngày "
+                            + booking.getEndDate()
+                            + ". Vui lòng trả xe trong app để hoàn tất chuyến đi.",
+                    NotificationType.BOOKING_DUE_TODAY, bookingId);
+            notifiedIds.add(bookingId);
+        }
+        return notifiedIds;
     }
 
     @Override

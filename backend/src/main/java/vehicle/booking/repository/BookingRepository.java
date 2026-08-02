@@ -50,6 +50,14 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
     """)
     List<Booking> findExpiredPendingUnpaidBookings(@Param("cutoff") LocalDateTime cutoff);
 
+    /** Đơn đang thuê và hôm nay là ngày kết thúc (đến hạn trả xe). */
+    @Query("""
+    select b from Booking b
+    where b.status = 'RENTING'
+      and b.endDate = :today
+    """)
+    List<Booking> findRentingBookingsDueOn(@Param("today") LocalDate today);
+
     @Query("""
     select b from Booking b
     where b.car.carId = :carId

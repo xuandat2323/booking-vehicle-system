@@ -6,6 +6,7 @@ import vehicle.booking.dto.response.BookingSummaryResponse;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -39,4 +40,7 @@ public interface BookingService {
     BookingResponse completeBooking(Long bookingId);
 
     List<Long> expirePendingUnpaidBookings(LocalDateTime cutoff);
+
+    /** Gửi thông báo đến hạn trả xe (mỗi đơn tối đa một lần). */
+    List<Long> notifyDueReturnBookings(LocalDate today);
 }
